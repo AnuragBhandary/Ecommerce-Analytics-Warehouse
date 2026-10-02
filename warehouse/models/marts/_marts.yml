@@ -1,0 +1,114 @@
+version: 2
+
+models:
+  - name: dim_date
+    columns:
+      - name: date_key
+        tests: [unique, not_null]
+      - name: date
+        tests: [unique, not_null]
+
+  - name: dim_customer
+    description: SCD Type 2 customer address history (from snap_customers).
+    columns:
+      - name: customer_sk
+        tests: [unique, not_null]
+      - name: customer_unique_id
+        tests: [not_null]
+      - name: state
+        tests: [not_null]
+
+  - name: dim_product
+    columns:
+      - name: product_sk
+        tests: [unique, not_null]
+      - name: product_id
+        tests: [unique, not_null]
+
+  - name: dim_seller
+    columns:
+      - name: seller_sk
+        tests: [unique, not_null]
+      - name: seller_id
+        tests: [unique, not_null]
+
+  - name: fct_orders
+    columns:
+      - name: order_id
+        tests: [unique, not_null]
+      - name: customer_sk
+        description: The customer's address version current at purchase time (point-in-time join).
+        tests:
+          - not_null
+          - relationships: { to: ref('dim_customer'), field: customer_sk }
+      - name: purchase_date_key
+        tests:
+          - not_null
+          - relationships: { to: ref('dim_date'), field: date_key }
+      - name: gross_revenue
+        tests: [not_null, non_negative]
+      - name: payment_value
+        tests: [not_null, non_negative]
+      - name: customer_order_number
+        tests: [not_null]
+
+  - name: fct_order_items
+    tests:
+      - unique_combination: { columns: [order_id, order_item_id] }
+    columns:
+      - name: order_id
+        tests:
+          - relationships: { to: ref('fct_orders'), field: order_id }
+      - name: product_sk
+        tests:
+          - not_null
+          - relationships: { to: ref('dim_product'), field: product_sk }
+      - name: seller_sk
+        tests:
+          - not_null
+          - relationships: { to: ref('dim_seller'), field: seller_sk }
+      - name: purchase_date_key
+        tests:
+          - relationships: { to: ref('dim_date'), field: date_key }
+      - name: item_revenue
+        tests: [not_null, non_negative]
+
+  - name: fct_payments
+    tests:
+      - unique_combination: { columns: [order_id, payment_sequential] }
+    columns:
+      - name: order_id
+        tests:
+          - relationships: { to: ref('fct_orders'), field: order_id }
+      - name: installments
+        tests:
+          - between: { min_value: 0, max_value: 24 }
+
+  - name: fct_reviews
+    tests:
+      - unique_combination: { columns: [review_id, order_id] }
+    columns:
+      - name: order_id
+        tests:
+          - relationships: { to: ref('fct_orders'), field: order_id }
+      - name: sent_date_key
+        tests:
+          - relationships: { to: ref('dim_date'), field: date_key }
+      - name: score
+        tests:
+          - between: { min_value: 1, max_value: 5 }
+
+  - name: mart_seller_monthly
+    tests:
+      - unique_combination: { columns: [seller_id, month] }
+    columns:
+      - name: late_orders
+        tests: [non_negative]
+
+  - name: mart_customer_cohorts
+    tests:
+      - unique_combination: { columns: [cohort_month, months_since_first] }
+    columns:
+      - name: retention_rate
+        tests:
+          - between: { min_value: 0, max_value: 1 }

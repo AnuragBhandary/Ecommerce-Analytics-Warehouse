@@ -1,0 +1,35 @@
+name: olist_warehouse
+version: "1.0.0"
+config-version: 2
+profile: olist_warehouse
+
+model-paths: ["models"]
+snapshot-paths: ["snapshots"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+clean-targets: ["target"]
+
+models:
+  olist_warehouse:
+    staging:
+      +schema: staging
+      +materialized: view
+    marts:
+      +schema: marts
+      +materialized: table
+      +grants:
+        select: ["bi_reader"]
+
+# BI tools connect as the read-only bi_reader role. dbt owns the schema grant too, so it
+# survives the marts schema being dropped and rebuilt (it once didn't, and every dashboard broke).
+on-run-end:
+  - >-
+    DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'marts') THEN
+        GRANT USAGE ON SCHEMA marts TO bi_reader;
+      END IF;
+    END $$
+
+tests:
+  olist_warehouse:
+    +store_failures: false

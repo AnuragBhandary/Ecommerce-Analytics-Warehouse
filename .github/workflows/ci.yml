@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy
+
+  test:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: olist
+          MYSQL_USER: olist
+          MYSQL_PASSWORD: olist
+        ports: ["3307:3306"]
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uolist -polist"
+          --health-interval 3s --health-timeout 3s --health-retries 40
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: warehouse
+          POSTGRES_PASSWORD: warehouse
+          POSTGRES_DB: warehouse
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U warehouse" --health-interval 2s --health-timeout 3s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen
+      - name: Read-only BI role (created by docker/postgres/init.sql in the compose stack)
+        run: PGPASSWORD=warehouse psql -h 127.0.0.1 -p 5433 -U warehouse -d warehouse
+             -c "CREATE USER bi_reader WITH PASSWORD 'bi_reader'"
+      - name: Unit + integration tests (simulator, EL, SIGKILL recovery, reconcile, full dbt build)
+        run: uv run pytest --cov --cov-report=term --cov-fail-under=90
+      - name: dbt parse and docs (catches broken refs and YAML)
+        working-directory: warehouse
+        env: { DBT_PROFILES_DIR: ., DBT_DBNAME: warehouse_test }
+        run: uv run dbt parse --no-use-colors
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the Airflow image and check the DAG imports
+        run: |
+          docker compose build airflow-init
+          docker compose up -d --wait postgres mysql
+          docker compose run --rm airflow-init
+          docker compose run --rm --entrypoint "" airflow-scheduler \
+            bash -c "airflow dags list-import-errors -o plain && airflow dags list -o plain | grep olist_elt && dbt --version"

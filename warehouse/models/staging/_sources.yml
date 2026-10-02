@@ -1,0 +1,19 @@
+version: 2
+
+sources:
+  - name: raw
+    description: Landed by `olistwh el` (incremental, watermark-based) from the MySQL source.
+    schema: raw
+    loaded_at_field: _loaded_at
+    freshness:
+      warn_after: { count: 24, period: hour }
+    tables:
+      - name: orders
+      - name: order_items
+      - name: order_payments
+      - name: order_reviews
+      - name: customers
+      - name: products
+      - name: sellers
+      - name: category_translation
+        freshness: null
