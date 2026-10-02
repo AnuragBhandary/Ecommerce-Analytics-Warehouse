@@ -16,3 +16,4 @@ warehouse/target/
 warehouse/logs/
 warehouse/dbt_packages/
 logs/
+olist-marts-csv.zip
