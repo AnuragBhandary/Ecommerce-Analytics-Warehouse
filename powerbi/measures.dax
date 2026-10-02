@@ -1,0 +1,212 @@
+// ============================================================================================
+// Olist report measures. Create a table named _Measures (Home > Enter data > one empty column,
+// then delete the column) and add each measure below to it with New measure.
+//
+// Model this assumes (see powerbi/README.md, step 3):
+//   fct_orders[purchase_date_key]       -> dim_date[date_key]     active
+//   fct_orders[customer_sk]             -> dim_customer[customer_sk]
+//   fct_order_items[purchase_date_key]  -> dim_date[date_key]     active
+//   fct_order_items[product_sk]         -> dim_product[product_sk]
+//   fct_order_items[seller_sk]          -> dim_seller[seller_sk]
+//   (no fct_order_items -> fct_orders link: with both facts tied to dim_date it would create two
+//    filter paths from dim_date to items, which Power BI rejects as ambiguous. Items carry their
+//    own order_status and purchase_date_key instead.)
+//   fct_reviews[order_id]              -> fct_orders[order_id]   single direction (orders -> reviews)
+//   fct_reviews[sent_date_key]          -> dim_date[date_key]     INACTIVE (see Reviews Sent)
+//   fct_payments[order_id]              -> fct_orders[order_id]   single direction
+//   mart_seller_monthly[month]          -> dim_date[date]
+//   dim_date is marked as the date table (Table tools > Mark as date table > date).
+// ============================================================================================
+
+
+// ---------------------------------------------------------------- core
+
+// Revenue = what customers were charged for items + freight, excluding orders that never
+// happened (canceled / unavailable). Same definition as the Metabase dashboards and the
+// warehouse reconciliation, so all three show the same number.
+Revenue =
+CALCULATE (
+    SUM ( fct_orders[gross_revenue] ),
+    NOT fct_orders[order_status] IN { "canceled", "unavailable" }
+)
+
+Orders =
+CALCULATE (
+    COUNTROWS ( fct_orders ),
+    NOT fct_orders[order_status] IN { "canceled", "unavailable" }
+)
+
+Average Order Value =
+DIVIDE ( [Revenue], [Orders] )
+
+Items Sold =
+CALCULATE (
+    COUNTROWS ( fct_order_items ),
+    NOT fct_order_items[order_status] IN { "canceled", "unavailable" }
+)
+
+Freight Share % =
+DIVIDE (
+    CALCULATE ( SUM ( fct_orders[freight_value] ),
+        NOT fct_orders[order_status] IN { "canceled", "unavailable" } ),
+    [Revenue]
+)
+
+Customers =
+CALCULATE (
+    DISTINCTCOUNT ( fct_orders[customer_unique_id] ),
+    NOT fct_orders[order_status] IN { "canceled", "unavailable" }
+)
+
+New Customers =
+CALCULATE ( [Customers], fct_orders[is_first_order] = TRUE () )
+
+// Share of customers in the current filter context who have ordered more than once *ever*:
+// ALL ( dim_date ) removes the date filter inside the per-customer count.
+Repeat Customer % =
+VAR CustomersInContext = VALUES ( fct_orders[customer_unique_id] )
+VAR Repeaters =
+    FILTER (
+        CustomersInContext,
+        CALCULATE ( COUNTROWS ( fct_orders ), ALL ( dim_date ) ) > 1
+    )
+RETURN
+    DIVIDE ( COUNTROWS ( Repeaters ), COUNTROWS ( CustomersInContext ) )
+
+// Share of whatever is selected on the visual's other axis (e.g. a category's share of all
+// categories shown), respecting slicers.
+Revenue % of Total =
+DIVIDE ( [Revenue], CALCULATE ( [Revenue], ALLSELECTED () ) )
+
+
+// ---------------------------------------------------------------- time intelligence
+
+Revenue PY =
+CALCULATE ( [Revenue], SAMEPERIODLASTYEAR ( dim_date[date] ) )
+
+Revenue YoY % =
+VAR Prior = [Revenue PY]
+RETURN
+    IF ( NOT ISBLANK ( Prior ), DIVIDE ( [Revenue] - Prior, Prior ) )
+
+Revenue PM =
+CALCULATE ( [Revenue], DATEADD ( dim_date[date], -1, MONTH ) )
+
+Revenue MoM % =
+VAR Prior = [Revenue PM]
+RETURN
+    IF ( NOT ISBLANK ( Prior ), DIVIDE ( [Revenue] - Prior, Prior ) )
+
+Revenue YTD =
+TOTALYTD ( [Revenue], dim_date[date] )
+
+Revenue Running Total =
+CALCULATE (
+    [Revenue],
+    FILTER ( ALL ( dim_date ), dim_date[date] <= MAX ( dim_date[date] ) )
+)
+
+Revenue 3M Moving Avg =
+AVERAGEX (
+    DATESINPERIOD ( dim_date[month_start], MAX ( dim_date[date] ), -3, MONTH ),
+    CALCULATE ( [Revenue] )
+)
+
+
+// ---------------------------------------------------------------- delivery
+
+Delivered Orders =
+CALCULATE ( COUNTROWS ( fct_orders ), fct_orders[is_delivered] = TRUE () )
+
+Late Orders =
+CALCULATE (
+    COUNTROWS ( fct_orders ),
+    fct_orders[is_delivered] = TRUE (),
+    fct_orders[is_late] = TRUE ()
+)
+
+On-time Delivery % =
+1 - DIVIDE ( [Late Orders], [Delivered Orders] )
+
+Avg Delivery Days =
+CALCULATE ( AVERAGE ( fct_orders[delivery_days] ), fct_orders[is_delivered] = TRUE () )
+
+Avg Days Late (late orders) =
+CALCULATE (
+    AVERAGE ( fct_orders[delay_days] ),
+    fct_orders[is_late] = TRUE ()
+)
+
+
+// ---------------------------------------------------------------- reviews
+
+Avg Review Score =
+AVERAGE ( fct_reviews[score] )
+
+// Filters on fct_orders reach fct_reviews through the order_id relationship, so this is the
+// average score of reviews on late orders.
+Avg Review Score (late) =
+CALCULATE ( [Avg Review Score], fct_orders[is_late] = TRUE () )
+
+Avg Review Score (on time) =
+CALCULATE (
+    [Avg Review Score],
+    fct_orders[is_delivered] = TRUE (),
+    fct_orders[is_late] = FALSE ()
+)
+
+// Counts surveys by the date they were *sent*, using the inactive relationship: the active
+// path to dim_date runs through fct_orders (purchase date).
+Reviews Sent =
+CALCULATE (
+    COUNTROWS ( fct_reviews ),
+    USERELATIONSHIP ( fct_reviews[sent_date_key], dim_date[date_key] ),
+    CROSSFILTER ( fct_reviews[order_id], fct_orders[order_id], NONE )
+)
+
+Review Response Rate =
+DIVIDE (
+    CALCULATE ( COUNTROWS ( fct_reviews ), fct_reviews[is_answered] = TRUE () ),
+    COUNTROWS ( fct_reviews )
+)
+
+
+// ---------------------------------------------------------------- payments
+
+Payment Value =
+SUM ( fct_payments[payment_value] )
+
+Voucher Share % =
+DIVIDE (
+    CALCULATE ( [Payment Value], fct_payments[payment_type] = "voucher" ),
+    [Payment Value]
+)
+
+Avg Installments (credit card) =
+CALCULATE ( AVERAGE ( fct_payments[installments] ), fct_payments[payment_type] = "credit_card" )
+
+
+// ---------------------------------------------------------------- sellers (mart_seller_monthly)
+
+Seller Revenue =
+SUM ( mart_seller_monthly[revenue] )
+
+Seller Late Rate % =
+DIVIDE ( SUM ( mart_seller_monthly[late_orders] ), SUM ( mart_seller_monthly[delivered_orders] ) )
+
+Seller Revenue Rank =
+IF (
+    HASONEVALUE ( mart_seller_monthly[seller_id] ),
+    RANKX ( ALLSELECTED ( mart_seller_monthly[seller_id] ), [Seller Revenue] )
+)
+
+
+// ---------------------------------------------------------------- cohorts (mart_customer_cohorts)
+
+// Weighted across cohorts: total returning customers / total cohort size, never an average of
+// percentages.
+Cohort Retention % =
+DIVIDE (
+    SUM ( mart_customer_cohorts[active_customers] ),
+    SUM ( mart_customer_cohorts[cohort_size] )
+)
