@@ -7,7 +7,9 @@ seller, and **row-level security** by seller state.
 **The built report:** [`olist-report/`](olist-report) (Power BI project, open
 `olist-report.pbip`), [`olist-report.pdf`](olist-report.pdf), and one PNG per page in
 [`screenshots/`](screenshots). To open it on another machine, run `make export`, then in Power BI
-set Transform data > Edit parameters > `ExportsFolder` to that `exports` folder and Refresh.
+set Transform data > Edit parameters > `ExportsFolder` to that `exports` folder and Refresh. The
+project (and the Excel workbook) were first generated from code by
+[`tools/powerbi`](../tools/powerbi), then refreshed, tested and saved in Power BI Desktop.
 
 | Overview | Sales trends |
 |---|---|
