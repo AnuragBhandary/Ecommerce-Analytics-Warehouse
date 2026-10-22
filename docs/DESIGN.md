@@ -160,7 +160,7 @@ fix was to define a cohort by the first successful order. Bad numbers never reac
 - **Metabase** (in the stack): three dashboards (Revenue, Cohort retention, Delivery performance),
   created through the REST API by `metabase/setup_dashboards.py` so they're versioned and
   rebuildable.
-- **Power BI:** a 4-page report with 33 DAX measures, drill-through and row-level security
+- **Power BI:** a 4-page report with 37 DAX measures, drill-through and row-level security
   ([powerbi/README.md](../powerbi/README.md)).
 - **Excel:** a seller-performance workbook (Power Query, PivotTables, XLOOKUP)
   ([excel/README.md](../excel/README.md)).

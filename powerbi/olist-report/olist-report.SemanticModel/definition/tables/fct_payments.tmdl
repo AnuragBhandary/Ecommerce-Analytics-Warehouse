@@ -1,0 +1,57 @@
+table fct_payments
+	lineageTag: af56e960-6910-43a6-b02d-046bb48b6df1
+
+	column order_id
+		dataType: string
+		isHidden
+		lineageTag: 6c6f1d73-7bed-41f7-bbd0-0f2e80f87179
+		summarizeBy: none
+		sourceColumn: order_id
+
+	column payment_sequential
+		dataType: int64
+		formatString: #,0
+		lineageTag: 52835ddf-faf4-4b57-bacb-6863c54e331d
+		summarizeBy: none
+		sourceColumn: payment_sequential
+
+	column purchase_date_key
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 3230e709-5d7f-4a76-bea3-4ed4f66db1f3
+		summarizeBy: none
+		sourceColumn: purchase_date_key
+
+	column payment_type
+		dataType: string
+		lineageTag: 982bdc2a-7a90-4bab-b71f-86b118ceca92
+		summarizeBy: none
+		sourceColumn: payment_type
+
+	column installments
+		dataType: int64
+		formatString: #,0
+		lineageTag: b3983163-3346-47a0-b317-e3e3af29559d
+		summarizeBy: none
+		sourceColumn: installments
+
+	column payment_value
+		dataType: decimal
+		formatString: #,0.00
+		lineageTag: acb68c26-96da-4df1-84ad-cf79513f9870
+		summarizeBy: sum
+		sourceColumn: payment_value
+
+	partition fct_payments = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents(ExportsFolder & "\fct_payments.csv"), [Delimiter = ",", Encoding = 65001, QuoteStyle = QuoteStyle.Csv]),
+				    Headers = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+				    Kept = Table.SelectColumns(Headers, {"order_id", "payment_sequential", "purchase_date_key", "payment_type", "installments", "payment_value"}),
+				    Blanks = Table.TransformColumns(Kept, {}, each if _ = "" then null else _),
+				    Typed = Table.TransformColumnTypes(Blanks, {{"order_id", type text}, {"payment_sequential", Int64.Type}, {"purchase_date_key", Int64.Type}, {"payment_type", type text}, {"installments", Int64.Type}, {"payment_value", Currency.Type}}, "en-US")
+				in
+				    Typed
+

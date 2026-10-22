@@ -1,0 +1,41 @@
+relationship 8c85da9b-6e6a-56c8-b604-17e67a4ad413
+	fromColumn: fct_orders.purchase_date_key
+	toColumn: dim_date.date_key
+
+relationship 86b10791-ad37-56a4-9d4f-91341ebd2c81
+	fromColumn: fct_orders.customer_sk
+	toColumn: dim_customer.customer_sk
+
+relationship 0e6312bf-07c6-5e5a-a4c3-da4b126e716e
+	fromColumn: fct_order_items.purchase_date_key
+	toColumn: dim_date.date_key
+
+relationship 9efdfe4a-fb1e-5655-8db2-6a5aaaee1c0e
+	fromColumn: fct_order_items.product_sk
+	toColumn: dim_product.product_sk
+
+relationship 6c866136-f4dc-5c88-992c-d5f12da7be77
+	fromColumn: fct_order_items.seller_sk
+	toColumn: dim_seller.seller_sk
+
+relationship 3d6b7fc5-3b3b-5bf4-8f06-703f21f054b8
+	fromColumn: fct_reviews.order_id
+	toColumn: fct_orders.order_id
+
+relationship 86b91609-e9b9-5fcb-89d9-29e1058f7c73
+	isActive: false
+	fromColumn: fct_reviews.sent_date_key
+	toColumn: dim_date.date_key
+
+relationship d34271fd-9725-5e7d-a3dc-c603d7435c82
+	fromColumn: fct_payments.order_id
+	toColumn: fct_orders.order_id
+
+relationship 74af3f9f-79ef-5317-80d8-d54b8a533d31
+	fromColumn: mart_seller_monthly.month
+	toColumn: dim_date.date
+
+relationship ce48948c-a79e-549c-805f-bb817b7519b7
+	fromColumn: mart_customer_cohorts.cohort_month
+	toColumn: dim_date.date
+

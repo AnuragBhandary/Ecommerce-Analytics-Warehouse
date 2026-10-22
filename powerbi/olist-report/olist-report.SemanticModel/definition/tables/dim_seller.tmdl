@@ -1,0 +1,46 @@
+table dim_seller
+	lineageTag: 7e52d083-6ddf-4518-b18c-852c9aee477c
+
+	column seller_sk
+		dataType: string
+		isHidden
+		lineageTag: 67c8b306-72c5-4368-9068-c0fbe3a82c3c
+		summarizeBy: none
+		sourceColumn: seller_sk
+
+	column seller_id
+		dataType: string
+		lineageTag: 205de931-60ae-442d-808d-c8db5497704b
+		summarizeBy: none
+		sourceColumn: seller_id
+
+	column zip_code_prefix
+		dataType: string
+		lineageTag: a0a31a8f-5a10-44c6-94c2-a58f6153b566
+		summarizeBy: none
+		sourceColumn: zip_code_prefix
+
+	column city
+		dataType: string
+		lineageTag: 73495392-0ecc-4b2f-ab7f-b8ddd826adfd
+		summarizeBy: none
+		sourceColumn: city
+
+	column state
+		dataType: string
+		lineageTag: fc6d20a9-ad84-4c50-a7fb-70b3512803af
+		summarizeBy: none
+		sourceColumn: state
+
+	partition dim_seller = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents(ExportsFolder & "\dim_seller.csv"), [Delimiter = ",", Encoding = 65001, QuoteStyle = QuoteStyle.Csv]),
+				    Headers = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+				    Kept = Table.SelectColumns(Headers, {"seller_sk", "seller_id", "zip_code_prefix", "city", "state"}),
+				    Blanks = Table.TransformColumns(Kept, {}, each if _ = "" then null else _),
+				    Typed = Table.TransformColumnTypes(Blanks, {{"seller_sk", type text}, {"seller_id", type text}, {"zip_code_prefix", type text}, {"city", type text}, {"state", type text}}, "en-US")
+				in
+				    Typed
+

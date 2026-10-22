@@ -1,0 +1,30 @@
+model Model
+	culture: en-US
+	defaultPowerBIDataSourceVersion: powerBI_V3
+	sourceQueryCulture: en-US
+	dataAccessOptions
+		legacyRedirects
+		returnErrorValuesAsNull
+
+annotation __PBI_TimeIntelligenceEnabled = 0
+
+annotation PBI_QueryOrder = ["ExportsFolder","_Measures","dim_date","dim_customer","dim_product","dim_seller","fct_orders","fct_order_items","fct_payments","fct_reviews","mart_seller_monthly","mart_customer_cohorts"]
+
+annotation PBI_ProTooling = ["DevMode"]
+
+ref table _Measures
+ref table dim_date
+ref table dim_customer
+ref table dim_product
+ref table dim_seller
+ref table fct_orders
+ref table fct_order_items
+ref table fct_payments
+ref table fct_reviews
+ref table mart_seller_monthly
+ref table mart_customer_cohorts
+
+ref role 'Seller region SP'
+ref role 'Seller region RJ'
+ref role 'Seller region MG'
+

@@ -81,8 +81,9 @@ cohort). Two are deliberate warnings for known Olist data issues.
 
 - **Metabase** (`localhost:3000`): Revenue, Cohort retention and Delivery performance dashboards,
   created through the API by [`metabase/setup_dashboards.py`](metabase/setup_dashboards.py)
-- **Power BI**: 4-page report, 33 DAX measures (YoY/MoM, YTD, running total, cohort retention,
+- **Power BI**: 4-page report, 37 DAX measures (YoY/MoM, YTD, running total, cohort retention,
   on-time delivery rate), drill-through by seller, row-level security by seller state:
+  [PDF](powerbi/olist-report.pdf) · [project (.pbip)](powerbi/olist-report) ·
   [build guide](powerbi/README.md) · [measures.dax](powerbi/measures.dax)
 - **Excel**: seller-performance workbook with Power Query, PivotTables, XLOOKUP scorecard and
   conditional formatting, reconciled to the Power BI total: [build guide](excel/README.md)
@@ -94,6 +95,10 @@ All three read the `marts` schema through `bi_reader`, a role that can only SELE
 | Delivery performance | Cohort retention |
 |---|---|
 | ![Delivery performance](docs/img/metabase-delivery-performance.png) | ![Cohort retention](docs/img/metabase-cohort-retention.png) |
+
+| Power BI: overview | Power BI: seller drill-through |
+|---|---|
+| ![Power BI overview](powerbi/screenshots/1-overview.png) | ![Power BI seller detail](powerbi/screenshots/4-seller-detail.png) |
 
 The headline finding is in the delivery dashboard: orders delivered 8+ days late average a review
 score of about **1.7**, against about **4.3** for on-time orders. (Revenue drops in Sep–Oct 2018

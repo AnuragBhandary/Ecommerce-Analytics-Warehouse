@@ -1,0 +1,9 @@
+role 'Seller region SP'
+	modelPermission: read
+
+	tablePermission dim_seller = [state] = "SP"
+
+	tablePermission mart_seller_monthly = [seller_state] = "SP"
+
+	annotation PBI_Id = db9276167a564dbaa1dd123bc16658fd
+

@@ -6,12 +6,20 @@ BI report. Excel 365 or 2021+ is needed for XLOOKUP. Build time is about an hour
 
 Save it as `excel/seller-performance.xlsx`.
 
+**The built workbook:** [`seller-performance.xlsx`](seller-performance.xlsx). Sheets: `Scorecard`
+(XLOOKUP seller card, monthly trend and chart, reconciliation), `Pivot` (three PivotTables
+sharing a seller-state slicer and a month timeline), `Sellers` and `Data` (the Power Query
+tables), `Settings` (the `ExportsFolder` cell that both queries read). The reconciliation check
+reads **OK**: R$ 15,735,527.03 in both the workbook and Power BI. To refresh on another machine,
+run `make export`, put the `exports` path in `Settings!A2`, then Data > Refresh All.
+
 ## 1. Data: Power Query
 
 On the pipeline machine, `make export` writes `exports/mart_seller_monthly.csv` (plus every
 other mart). Copy the `exports` folder to wherever the workbook lives.
 
-Data > Get Data > From File > From Text/CSV > `mart_seller_monthly.csv` > **Transform Data**:
+Data > Get Data > From File > From Text/CSV > `mart_seller_monthly.csv` > **Transform Data** (the built
+workbook reads the folder from the `ExportsFolder` table on `Settings` instead of a fixed path):
 
 1. Types: `month` Date; `orders`, `items`, `delivered_orders`, `late_orders` Whole Number;
    `revenue` Currency; `avg_review_score` Decimal
@@ -56,9 +64,10 @@ A one-seller scorecard. Type a seller id and everything fills in:
 | B10 | rank: `=COUNTIF(SellerTotals[Sum of revenue], ">" & B6) + 1` |
 | B11 | state rank: `=COUNTIFS(SellerTotals[seller_state], B4, SellerTotals[Sum of revenue], ">" & B6) + 1` |
 
-Monthly trend below it, using dynamic arrays:
-`=FILTER(SellerMonthly[[year_month]:[revenue]], SellerMonthly[seller_id] = $B$2)`.
-Add a line chart over that spill range.
+Monthly trend below it: one row per month in A15 down (every `year_month` in the data), with
+`=SUMIFS(SellerMonthly[revenue], SellerMonthly[seller_id], $B$2, SellerMonthly[year_month], $A15)`
+(and the same for orders and late orders), plus a line chart over it. SUMIFS rather than a
+`FILTER` spill keeps the chart's range fixed and works in every Excel version.
 
 ## 4. Conditional formatting
 
