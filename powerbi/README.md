@@ -1,8 +1,43 @@
 # Power BI report: build guide
 
-A 4-page Power BI report on the warehouse's star schema: **33 DAX measures** (YoY/MoM time
+A 4-page Power BI report on the warehouse's star schema: **37 DAX measures** (YoY/MoM time
 intelligence, running totals, cohort retention, on-time delivery rate), a drill-through page per
 seller, and **row-level security** by seller state.
+
+**The built report:** [`olist-report/`](olist-report) (Power BI project, open
+`olist-report.pbip`), [`olist-report.pdf`](olist-report.pdf), and one PNG per page in
+[`screenshots/`](screenshots). To open it on another machine, run `make export`, then in Power BI
+set Transform data > Edit parameters > `ExportsFolder` to that `exports` folder and Refresh.
+
+| Overview | Sales trends |
+|---|---|
+| ![Overview](screenshots/1-overview.png) | ![Sales trends](screenshots/2-sales-trends.png) |
+| **Delivery and reviews** | **Seller detail (drill-through)** |
+| ![Delivery and reviews](screenshots/3-delivery-reviews.png) | ![Seller detail](screenshots/4-seller-detail.png) |
+
+### What changed from the plan below, and why
+
+Building it surfaced problems the original plan would have shipped:
+
+- **Revenue by category needs `Item Revenue`.** `dim_product` only filters `fct_order_items`,
+  so `[Revenue]` (on `fct_orders`) would show the grand total on every category bar.
+  `Item Revenue` sums the items, and `TREATAS` carries the visible orders (customer-state
+  slicer) across, so it respects the same slicers and totals to the same R$ 15,735,527.03.
+- **Date-table overrun.** `dim_date` runs to 2019 but orders stop on 2018-10-17, so
+  `Revenue PY` kept plotting 2018 values into 2019. `Last Order Date` blanks PY, YTD, running
+  total and moving average after the last order.
+- **2016 is a launch period** (about 330 orders in three months): growth against it showed
+  +4,000,000%. `Analysis Start` (2017-01-01) blanks PY / YoY / MoM when the comparison period
+  falls before it, and trend visuals filter to Jan 2017 - Aug 2018 (complete months). The
+  overview cards stay all-time, so they still reconcile to the warehouse.
+- **`On-time Delivery %` read 100% for months with no deliveries** (`1 - DIVIDE(blank)` is 1);
+  it now returns blank.
+- **`Seller Revenue Rank`** uses `ALL` over the seller columns: `ALLSELECTED` returns 1 on the
+  drill-through page, and keeping `seller_state` in context ranked sellers within their state.
+- **Booleans arrive as `t`/`f`** in the CSV export; Power Query converts them to true/false
+  before typing, or every `= TRUE ()` filter in the measures fails.
+- The cohort matrix hides month 0 (always 100%), so the colour scale shows the real 0.1-0.7%
+  repeat rates.
 
 Power BI Desktop is free but **Windows only**. Total build time is about half a day the first
 time. Commit the result as a `.pbip` project (step 9) so it diffs in git like code.

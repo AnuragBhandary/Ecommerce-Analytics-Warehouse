@@ -1,0 +1,99 @@
+/// Calendar 2016-2019, marked as the date table (time intelligence needs it contiguous).
+table dim_date
+	lineageTag: 596d76b3-8f98-46f1-93c2-19f45a751f5a
+	dataCategory: Time
+
+	column date_key
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 79c33cf5-d275-4408-bf92-a1675f9d94d5
+		summarizeBy: none
+		sourceColumn: date_key
+
+	column date
+		dataType: dateTime
+		isKey
+		formatString: yyyy-mm-dd
+		lineageTag: 6317931a-447d-4a0d-9d3d-7e2a227ec9d5
+		summarizeBy: none
+		sourceColumn: date
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column year
+		dataType: int64
+		formatString: 0
+		lineageTag: 1eeb43ce-00a3-46cd-8703-a8c811603e39
+		summarizeBy: none
+		sourceColumn: year
+
+	column quarter
+		dataType: int64
+		formatString: #,0
+		lineageTag: 3efe8927-28c8-4fa4-9e90-2423312ecd84
+		summarizeBy: none
+		sourceColumn: quarter
+
+	column month
+		dataType: int64
+		formatString: #,0
+		lineageTag: 72976d9a-be48-4a00-b0f9-b3e15a61029c
+		summarizeBy: none
+		sourceColumn: month
+
+	column month_name
+		dataType: string
+		lineageTag: d2d5ee98-e392-499a-ba2d-3a2c1f11e99b
+		summarizeBy: none
+		sourceColumn: month_name
+		sortByColumn: month
+
+	column year_month
+		dataType: string
+		lineageTag: fbb56ff3-541e-418f-8499-5c9e58882aae
+		summarizeBy: none
+		sourceColumn: year_month
+
+	column month_start
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		lineageTag: cf8afe17-1310-4a0c-959a-b034d099efe8
+		summarizeBy: none
+		sourceColumn: month_start
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column day_of_week
+		dataType: int64
+		formatString: #,0
+		lineageTag: f0abcaa6-c7b0-49e6-bbb4-f8f17daa96fd
+		summarizeBy: none
+		sourceColumn: day_of_week
+
+	column day_name
+		dataType: string
+		lineageTag: 0539beca-80d0-48a7-9a42-ff01cb2eb92e
+		summarizeBy: none
+		sourceColumn: day_name
+		sortByColumn: day_of_week
+
+	column is_weekend
+		dataType: boolean
+		lineageTag: f98a1260-cab2-4ed7-bc98-8f572841f3b1
+		summarizeBy: none
+		sourceColumn: is_weekend
+
+	partition dim_date = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents(ExportsFolder & "\dim_date.csv"), [Delimiter = ",", Encoding = 65001, QuoteStyle = QuoteStyle.Csv]),
+				    Headers = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+				    Kept = Table.SelectColumns(Headers, {"date_key", "date", "year", "quarter", "month", "month_name", "year_month", "month_start", "day_of_week", "day_name", "is_weekend"}),
+				    Blanks = Table.TransformColumns(Kept, {}, each if _ = "" then null else _),
+				    Flags = Table.TransformColumns(Blanks, {{"is_weekend", each if _ = null then null else _ = "t", type logical}}),
+				    Typed = Table.TransformColumnTypes(Flags, {{"date_key", Int64.Type}, {"date", type date}, {"year", Int64.Type}, {"quarter", Int64.Type}, {"month", Int64.Type}, {"month_name", type text}, {"year_month", type text}, {"month_start", type date}, {"day_of_week", Int64.Type}, {"day_name", type text}}, "en-US")
+				in
+				    Typed
+

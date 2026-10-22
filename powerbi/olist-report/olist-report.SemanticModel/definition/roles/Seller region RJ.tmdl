@@ -1,0 +1,9 @@
+role 'Seller region RJ'
+	modelPermission: read
+
+	tablePermission dim_seller = [state] = "RJ"
+
+	tablePermission mart_seller_monthly = [seller_state] = "RJ"
+
+	annotation PBI_Id = 8aced0f4229a4d9196219748592e45e6
+

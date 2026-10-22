@@ -17,3 +17,7 @@ warehouse/logs/
 warehouse/dbt_packages/
 logs/
 olist-marts-csv.zip
+
+# Power BI project: local cache and per-user settings
+**/.pbi/localSettings.json
+**/.pbi/cache.abf

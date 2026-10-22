@@ -1,0 +1,84 @@
+table mart_seller_monthly
+	lineageTag: 2dd5cfcb-3a65-4b12-8c90-38788e04dad4
+
+	column seller_id
+		dataType: string
+		lineageTag: 3974f170-2b9e-4b0f-8f8c-41d4c79b44fc
+		summarizeBy: none
+		sourceColumn: seller_id
+
+	column seller_state
+		dataType: string
+		lineageTag: 32a8c5c3-04a3-402a-8cd3-22e3decf2064
+		summarizeBy: none
+		sourceColumn: seller_state
+
+	column seller_city
+		dataType: string
+		lineageTag: e206f7ac-2337-4f6f-8bcb-e209596a7a31
+		summarizeBy: none
+		sourceColumn: seller_city
+
+	column month
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		lineageTag: 9b33a80d-d4c6-402e-ac23-20e6b065d9fd
+		summarizeBy: none
+		sourceColumn: month
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column orders
+		dataType: int64
+		formatString: #,0
+		lineageTag: 3562f627-2ea6-4984-8f7e-fe71b2395007
+		summarizeBy: sum
+		sourceColumn: orders
+
+	column items
+		dataType: int64
+		formatString: #,0
+		lineageTag: c780934d-e249-4472-b135-7869ac67de12
+		summarizeBy: sum
+		sourceColumn: items
+
+	column revenue
+		dataType: decimal
+		formatString: #,0.00
+		lineageTag: 929a774a-7903-4fc3-8693-61f62f8bc2f1
+		summarizeBy: sum
+		sourceColumn: revenue
+
+	column delivered_orders
+		dataType: int64
+		formatString: #,0
+		lineageTag: 8b05aa46-9f0c-4ae8-9d57-b1fa3056547f
+		summarizeBy: sum
+		sourceColumn: delivered_orders
+
+	column late_orders
+		dataType: int64
+		formatString: #,0
+		lineageTag: 3cfee6cf-70c8-4db3-b27e-b97611ee864c
+		summarizeBy: sum
+		sourceColumn: late_orders
+
+	column avg_review_score
+		dataType: double
+		formatString: #,0.00
+		lineageTag: 2edc680d-fb81-4415-ba18-4913534ad6d8
+		summarizeBy: average
+		sourceColumn: avg_review_score
+
+	partition mart_seller_monthly = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents(ExportsFolder & "\mart_seller_monthly.csv"), [Delimiter = ",", Encoding = 65001, QuoteStyle = QuoteStyle.Csv]),
+				    Headers = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+				    Kept = Table.SelectColumns(Headers, {"seller_id", "seller_state", "seller_city", "month", "orders", "items", "revenue", "delivered_orders", "late_orders", "avg_review_score"}),
+				    Blanks = Table.TransformColumns(Kept, {}, each if _ = "" then null else _),
+				    Typed = Table.TransformColumnTypes(Blanks, {{"seller_id", type text}, {"seller_state", type text}, {"seller_city", type text}, {"month", type date}, {"orders", Int64.Type}, {"items", Int64.Type}, {"revenue", Currency.Type}, {"delivered_orders", Int64.Type}, {"late_orders", Int64.Type}, {"avg_review_score", type number}}, "en-US")
+				in
+				    Typed
+

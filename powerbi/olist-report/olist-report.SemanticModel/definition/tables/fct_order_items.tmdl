@@ -1,0 +1,85 @@
+/// One row per order line. Not related to fct_orders (see relationships.tmdl).
+table fct_order_items
+	lineageTag: 3319e744-c4d7-4ac3-9f21-b1dcded634c9
+
+	column order_id
+		dataType: string
+		lineageTag: b4d42053-509e-43de-a9a2-9eb733f145c1
+		summarizeBy: none
+		sourceColumn: order_id
+
+	column order_item_id
+		dataType: int64
+		formatString: #,0
+		lineageTag: 8e11cb2a-aa33-4bcd-a8be-40c6f7fda313
+		summarizeBy: none
+		sourceColumn: order_item_id
+
+	column product_sk
+		dataType: string
+		isHidden
+		lineageTag: 172ebc2b-7340-4281-b498-f943f3190542
+		summarizeBy: none
+		sourceColumn: product_sk
+
+	column seller_sk
+		dataType: string
+		isHidden
+		lineageTag: dfb4f651-a778-4f59-9d47-f643db9208d8
+		summarizeBy: none
+		sourceColumn: seller_sk
+
+	column purchase_date_key
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 9ff0091f-4159-4beb-8402-8b5ce4e06a1a
+		summarizeBy: none
+		sourceColumn: purchase_date_key
+
+	column order_status
+		dataType: string
+		lineageTag: 07d99ffe-e88e-4819-b8af-25b18c355d2a
+		summarizeBy: none
+		sourceColumn: order_status
+
+	column shipping_limit_at
+		dataType: dateTime
+		formatString: yyyy-mm-dd hh:nn:ss
+		lineageTag: b8811bff-9c55-45fe-8ce6-5d0a7f068158
+		summarizeBy: none
+		sourceColumn: shipping_limit_at
+
+	column price
+		dataType: decimal
+		formatString: #,0.00
+		lineageTag: 9530bcb8-fe53-40a5-96d5-8afd7bc337c6
+		summarizeBy: sum
+		sourceColumn: price
+
+	column freight_value
+		dataType: decimal
+		formatString: #,0.00
+		lineageTag: 7b7ae949-71ff-46cf-8874-4089a92b3044
+		summarizeBy: sum
+		sourceColumn: freight_value
+
+	column item_revenue
+		dataType: decimal
+		formatString: #,0.00
+		lineageTag: 102df4b8-b686-42e3-b417-998c477dc537
+		summarizeBy: sum
+		sourceColumn: item_revenue
+
+	partition fct_order_items = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents(ExportsFolder & "\fct_order_items.csv"), [Delimiter = ",", Encoding = 65001, QuoteStyle = QuoteStyle.Csv]),
+				    Headers = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+				    Kept = Table.SelectColumns(Headers, {"order_id", "order_item_id", "product_sk", "seller_sk", "purchase_date_key", "order_status", "shipping_limit_at", "price", "freight_value", "item_revenue"}),
+				    Blanks = Table.TransformColumns(Kept, {}, each if _ = "" then null else _),
+				    Typed = Table.TransformColumnTypes(Blanks, {{"order_id", type text}, {"order_item_id", Int64.Type}, {"product_sk", type text}, {"seller_sk", type text}, {"purchase_date_key", Int64.Type}, {"order_status", type text}, {"shipping_limit_at", type datetime}, {"price", Currency.Type}, {"freight_value", Currency.Type}, {"item_revenue", Currency.Type}}, "en-US")
+				in
+				    Typed
+

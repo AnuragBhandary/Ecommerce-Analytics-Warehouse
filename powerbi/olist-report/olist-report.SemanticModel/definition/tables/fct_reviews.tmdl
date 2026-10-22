@@ -1,0 +1,77 @@
+table fct_reviews
+	lineageTag: 754f7152-6ea9-437b-8e3f-3155d581e0f0
+
+	column review_id
+		dataType: string
+		lineageTag: ea3e5494-2027-484b-baa7-6c5cea223c4a
+		summarizeBy: none
+		sourceColumn: review_id
+
+	column order_id
+		dataType: string
+		isHidden
+		lineageTag: 69a25c70-7103-43a9-9075-6bc203a2a7bb
+		summarizeBy: none
+		sourceColumn: order_id
+
+	column sent_date_key
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 148f587d-b5ae-49dc-b307-9cad14468f94
+		summarizeBy: none
+		sourceColumn: sent_date_key
+
+	column score
+		dataType: int64
+		formatString: #,0
+		lineageTag: db070cbb-8a35-4e22-98b1-b4edcd8287d4
+		summarizeBy: none
+		sourceColumn: score
+
+	column is_answered
+		dataType: boolean
+		lineageTag: 4d26ef03-5e4d-4716-a2ef-2905dec1f472
+		summarizeBy: none
+		sourceColumn: is_answered
+
+	column has_comment
+		dataType: boolean
+		lineageTag: 2fbb2aec-3d77-4f8b-b667-df966f21bfc9
+		summarizeBy: none
+		sourceColumn: has_comment
+
+	column sent_at
+		dataType: dateTime
+		formatString: yyyy-mm-dd hh:nn:ss
+		lineageTag: 1e5b634b-5445-4fbf-a37b-4bc5e51f1886
+		summarizeBy: none
+		sourceColumn: sent_at
+
+	column answered_at
+		dataType: dateTime
+		formatString: yyyy-mm-dd hh:nn:ss
+		lineageTag: e665a17c-df59-44e1-aace-2901c8a163b2
+		summarizeBy: none
+		sourceColumn: answered_at
+
+	column response_hours
+		dataType: double
+		formatString: #,0.00
+		lineageTag: 59f3cfa3-d107-4c5c-9625-0813f936c504
+		summarizeBy: none
+		sourceColumn: response_hours
+
+	partition fct_reviews = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents(ExportsFolder & "\fct_reviews.csv"), [Delimiter = ",", Encoding = 65001, QuoteStyle = QuoteStyle.Csv]),
+				    Headers = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+				    Kept = Table.SelectColumns(Headers, {"review_id", "order_id", "sent_date_key", "score", "is_answered", "has_comment", "sent_at", "answered_at", "response_hours"}),
+				    Blanks = Table.TransformColumns(Kept, {}, each if _ = "" then null else _),
+				    Flags = Table.TransformColumns(Blanks, {{"is_answered", each if _ = null then null else _ = "t", type logical}, {"has_comment", each if _ = null then null else _ = "t", type logical}}),
+				    Typed = Table.TransformColumnTypes(Flags, {{"review_id", type text}, {"order_id", type text}, {"sent_date_key", Int64.Type}, {"score", Int64.Type}, {"sent_at", type datetime}, {"answered_at", type datetime}, {"response_hours", type number}}, "en-US")
+				in
+				    Typed
+

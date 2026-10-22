@@ -1,0 +1,6 @@
+/// Folder holding the `make export` CSVs. Change it in Transform data > Manage parameters.
+expression ExportsFolder = "C:\Anurag\Codes\Ecommerce-Analytics-Warehouse\exports" meta [IsParameterQuery = true, Type = "Text", IsParameterQueryRequired = true]
+	lineageTag: e97601a2-5824-42ac-875f-2ec435d05e11
+
+	annotation PBI_ResultType = Text
+

@@ -1,0 +1,177 @@
+/// One row per order. Revenue, delivery and cohort flags.
+table fct_orders
+	lineageTag: 69433a2b-6421-4b63-885d-73d7942fd5e7
+
+	column order_id
+		dataType: string
+		lineageTag: 28b48140-1707-4595-bee7-07414b511d2a
+		summarizeBy: none
+		sourceColumn: order_id
+
+	column customer_sk
+		dataType: string
+		isHidden
+		lineageTag: c02bdf1e-4410-4cd5-8528-ff23e0731c08
+		summarizeBy: none
+		sourceColumn: customer_sk
+
+	column customer_unique_id
+		dataType: string
+		lineageTag: 2d55443f-c552-4557-b970-0582e13cd587
+		summarizeBy: none
+		sourceColumn: customer_unique_id
+
+	column purchase_date_key
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: cb5f6619-523b-42ef-b6fa-51b92f800041
+		summarizeBy: none
+		sourceColumn: purchase_date_key
+
+	column order_status
+		dataType: string
+		lineageTag: 97ede3b9-a88c-429b-a823-d3b21ca05326
+		summarizeBy: none
+		sourceColumn: order_status
+
+	column purchased_at
+		dataType: dateTime
+		formatString: yyyy-mm-dd hh:nn:ss
+		lineageTag: 25064e76-f258-42cb-82d2-53a6b5427b66
+		summarizeBy: none
+		sourceColumn: purchased_at
+
+	column approved_at
+		dataType: dateTime
+		formatString: yyyy-mm-dd hh:nn:ss
+		lineageTag: 1ff14aae-7625-49da-9d2d-cef076073e8e
+		summarizeBy: none
+		sourceColumn: approved_at
+
+	column delivered_carrier_at
+		dataType: dateTime
+		formatString: yyyy-mm-dd hh:nn:ss
+		lineageTag: f69d20b0-628a-4785-9af3-e32015dd11bf
+		summarizeBy: none
+		sourceColumn: delivered_carrier_at
+
+	column delivered_customer_at
+		dataType: dateTime
+		formatString: yyyy-mm-dd hh:nn:ss
+		lineageTag: e2f09319-0b50-446f-ab12-6f7f23c7f935
+		summarizeBy: none
+		sourceColumn: delivered_customer_at
+
+	column estimated_delivery_date
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		lineageTag: 5b3de11f-295d-4b18-b0c9-8859980c2180
+		summarizeBy: none
+		sourceColumn: estimated_delivery_date
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column item_count
+		dataType: int64
+		formatString: #,0
+		lineageTag: e69da5e2-0039-4470-9738-48050ab2a33b
+		summarizeBy: sum
+		sourceColumn: item_count
+
+	column seller_count
+		dataType: int64
+		formatString: #,0
+		lineageTag: 789e073f-6476-4073-ae8d-94bfb915dd28
+		summarizeBy: sum
+		sourceColumn: seller_count
+
+	column items_value
+		dataType: decimal
+		formatString: #,0.00
+		lineageTag: 241eaa65-3f38-464d-8003-be9a72a080a8
+		summarizeBy: sum
+		sourceColumn: items_value
+
+	column freight_value
+		dataType: decimal
+		formatString: #,0.00
+		lineageTag: 9b192966-9270-459b-bc53-8cb8c742dfd2
+		summarizeBy: sum
+		sourceColumn: freight_value
+
+	column gross_revenue
+		dataType: decimal
+		formatString: #,0.00
+		lineageTag: c678c2bf-7d37-49b5-8232-b7dc99e7d805
+		summarizeBy: sum
+		sourceColumn: gross_revenue
+
+	column payment_value
+		dataType: decimal
+		formatString: #,0.00
+		lineageTag: 01a5610f-9b38-44f1-84ea-7655f9e4bc92
+		summarizeBy: sum
+		sourceColumn: payment_value
+
+	column is_delivered
+		dataType: boolean
+		lineageTag: e83fa5c5-3b16-4859-b98d-5841d89f0e96
+		summarizeBy: none
+		sourceColumn: is_delivered
+
+	column delivery_days
+		dataType: double
+		formatString: #,0.00
+		lineageTag: 116c37ed-32d3-47ce-a0e0-fb261d7291d6
+		summarizeBy: sum
+		sourceColumn: delivery_days
+
+	column delay_days
+		dataType: double
+		formatString: #,0.00
+		lineageTag: 3b9eb662-9f5b-4502-b0c3-3a3ef31261cf
+		summarizeBy: sum
+		sourceColumn: delay_days
+
+	column is_late
+		dataType: boolean
+		lineageTag: 1bd95e58-ff92-43d1-b29e-718bd093294c
+		summarizeBy: none
+		sourceColumn: is_late
+
+	column customer_order_number
+		dataType: int64
+		formatString: #,0
+		lineageTag: 9b3f1b6e-43b4-499c-b9b4-5e0834b1458d
+		summarizeBy: none
+		sourceColumn: customer_order_number
+
+	column is_first_order
+		dataType: boolean
+		lineageTag: 04709def-3475-4904-93e6-4fa05e8ee49f
+		summarizeBy: none
+		sourceColumn: is_first_order
+
+	column cohort_month
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		lineageTag: 7b97600e-7138-4b41-b087-e578129e8810
+		summarizeBy: none
+		sourceColumn: cohort_month
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	partition fct_orders = m
+		mode: import
+		source =
+				let
+				    Source = Csv.Document(File.Contents(ExportsFolder & "\fct_orders.csv"), [Delimiter = ",", Encoding = 65001, QuoteStyle = QuoteStyle.Csv]),
+				    Headers = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+				    Kept = Table.SelectColumns(Headers, {"order_id", "customer_sk", "customer_unique_id", "purchase_date_key", "order_status", "purchased_at", "approved_at", "delivered_carrier_at", "delivered_customer_at", "estimated_delivery_date", "item_count", "seller_count", "items_value", "freight_value", "gross_revenue", "payment_value", "is_delivered", "delivery_days", "delay_days", "is_late", "customer_order_number", "is_first_order", "cohort_month"}),
+				    Blanks = Table.TransformColumns(Kept, {}, each if _ = "" then null else _),
+				    Flags = Table.TransformColumns(Blanks, {{"is_delivered", each if _ = null then null else _ = "t", type logical}, {"is_late", each if _ = null then null else _ = "t", type logical}, {"is_first_order", each if _ = null then null else _ = "t", type logical}}),
+				    Typed = Table.TransformColumnTypes(Flags, {{"order_id", type text}, {"customer_sk", type text}, {"customer_unique_id", type text}, {"purchase_date_key", Int64.Type}, {"order_status", type text}, {"purchased_at", type datetime}, {"approved_at", type datetime}, {"delivered_carrier_at", type datetime}, {"delivered_customer_at", type datetime}, {"estimated_delivery_date", type date}, {"item_count", Int64.Type}, {"seller_count", Int64.Type}, {"items_value", Currency.Type}, {"freight_value", Currency.Type}, {"gross_revenue", Currency.Type}, {"payment_value", Currency.Type}, {"delivery_days", type number}, {"delay_days", type number}, {"customer_order_number", Int64.Type}, {"cohort_month", type date}}, "en-US")
+				in
+				    Typed
+

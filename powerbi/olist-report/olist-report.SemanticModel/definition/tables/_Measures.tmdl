@@ -1,0 +1,328 @@
+/// Measure table: every DAX measure lives here (see powerbi/measures.dax).
+table _Measures
+	lineageTag: 5e00c594-860f-43a2-b019-93a36db7da92
+
+	/// Revenue = what customers were charged for items + freight, excluding orders that never happened (canceled / unavailable). Same definition as the Metabase dashboards and the warehouse reconciliation, so all three show the same number.
+	measure Revenue =
+			CALCULATE (
+			    SUM ( fct_orders[gross_revenue] ),
+			    NOT fct_orders[order_status] IN { "canceled", "unavailable" }
+			)
+		formatString: \R\$ #,0
+		displayFolder: Core
+		lineageTag: 5f7b6214-e0d1-4923-820d-37e9a783771d
+
+	measure Orders =
+			CALCULATE (
+			    COUNTROWS ( fct_orders ),
+			    NOT fct_orders[order_status] IN { "canceled", "unavailable" }
+			)
+		formatString: #,0
+		displayFolder: Core
+		lineageTag: e2a6fdea-2e94-418f-8629-b0758529b1f9
+
+	measure 'Average Order Value' = DIVIDE ( [Revenue], [Orders] )
+		formatString: \R\$ #,0.00
+		displayFolder: Core
+		lineageTag: 19ca1692-f3ea-441f-be15-154ee7697af8
+
+	measure 'Items Sold' =
+			CALCULATE (
+			    COUNTROWS ( fct_order_items ),
+			    NOT fct_order_items[order_status] IN { "canceled", "unavailable" }
+			)
+		formatString: #,0
+		displayFolder: Core
+		lineageTag: dd5287d3-2bfb-4f1e-a34d-41f99423bac6
+
+	/// Revenue at item grain, for anything sliced by product or seller (dim_product and dim_seller only reach fct_order_items, so [Revenue] would repeat the grand total on every category). TREATAS passes the orders visible in the current context (customer state, etc.) onto the items, so this respects the same slicers as [Revenue] and sums to the same total.
+	measure 'Item Revenue' =
+			CALCULATE (
+			    SUM ( fct_order_items[item_revenue] ),
+			    NOT fct_order_items[order_status] IN { "canceled", "unavailable" },
+			    TREATAS ( VALUES ( fct_orders[order_id] ), fct_order_items[order_id] )
+			)
+		formatString: \R\$ #,0
+		displayFolder: Core
+		lineageTag: 11114c37-4421-4540-82ba-9710000439b1
+
+	measure 'Freight Share %' =
+			DIVIDE (
+			    CALCULATE ( SUM ( fct_orders[freight_value] ),
+			        NOT fct_orders[order_status] IN { "canceled", "unavailable" } ),
+			    [Revenue]
+			)
+		formatString: 0.0%
+		displayFolder: Core
+		lineageTag: e9d31649-de42-463a-aa00-c727072db093
+
+	measure Customers =
+			CALCULATE (
+			    DISTINCTCOUNT ( fct_orders[customer_unique_id] ),
+			    NOT fct_orders[order_status] IN { "canceled", "unavailable" }
+			)
+		formatString: #,0
+		displayFolder: Core
+		lineageTag: d17a0fbf-0a13-4295-ba1a-6fa1c49a24f3
+
+	measure 'New Customers' = CALCULATE ( [Customers], fct_orders[is_first_order] = TRUE () )
+		formatString: #,0
+		displayFolder: Core
+		lineageTag: 9bf55499-b334-488b-bc27-2f139f92c986
+
+	/// Share of customers in the current filter context who have ordered more than once *ever*: ALL ( dim_date ) removes the date filter inside the per-customer count.
+	measure 'Repeat Customer %' =
+			VAR CustomersInContext = VALUES ( fct_orders[customer_unique_id] )
+			VAR Repeaters =
+			    FILTER (
+			        CustomersInContext,
+			        CALCULATE ( COUNTROWS ( fct_orders ), ALL ( dim_date ) ) > 1
+			    )
+			RETURN
+			    DIVIDE ( COUNTROWS ( Repeaters ), COUNTROWS ( CustomersInContext ) )
+		formatString: 0.0%
+		displayFolder: Core
+		lineageTag: 1eb4940d-2de7-4eda-8e5c-a62f34ab6f50
+
+	/// Share of whatever is selected on the visual's other axis (e.g. a category's share of all categories shown), respecting slicers.
+	measure 'Revenue % of Total' = DIVIDE ( [Revenue], CALCULATE ( [Revenue], ALLSELECTED () ) )
+		formatString: #,0
+		displayFolder: Core
+		lineageTag: 97c6a3a7-2e01-4dbd-bd86-d788cfa72a3b
+
+	/// Last day with an order. dim_date runs to 2019 but orders stop in Oct 2018; the measures below return blank after this date, otherwise Revenue PY (and the running total, YTD, moving average) would keep plotting into 2019. ALL ( fct_orders ) also clears filters coming from its dimensions, so this is the same date whatever is sliced.
+	measure 'Last Order Date' = CALCULATE ( MAX ( fct_orders[purchased_at] ), ALL ( fct_orders ) )
+		formatString: yyyy-mm-dd
+		displayFolder: Time intelligence
+		lineageTag: 89c58d46-01cd-4c38-9289-cf8fbfd4c05d
+
+	/// Start of the analysis window. Olist's 2016 is a launch period (about 330 orders over three months), so growth rates against it are meaningless (+4,000,000%). Growth measures return blank when the comparison period falls before this date; trend pages also filter to Jan 2017 - Aug 2018 (Sep/Oct 2018 hold a handful of orders). Totals and cards still include every order.
+	measure 'Analysis Start' = DATE ( 2017, 1, 1 )
+		formatString: yyyy-mm-dd
+		displayFolder: Time intelligence
+		lineageTag: 4a95eefe-f31a-427f-a386-71f13210da93
+
+	measure 'Revenue PY' =
+			IF (
+			    MIN ( dim_date[date] ) <= [Last Order Date]
+			        && EDATE ( MIN ( dim_date[date] ), -12 ) >= [Analysis Start],
+			    CALCULATE ( [Revenue], SAMEPERIODLASTYEAR ( dim_date[date] ) )
+			)
+		formatString: \R\$ #,0
+		displayFolder: Time intelligence
+		lineageTag: b55233c5-faf1-41a0-a858-65fbd79a0429
+
+	measure 'Revenue YoY %' =
+			VAR Prior = [Revenue PY]
+			RETURN
+			    IF (
+			        NOT ISBLANK ( Prior ) && EDATE ( MIN ( dim_date[date] ), -12 ) >= [Analysis Start],
+			        DIVIDE ( [Revenue] - Prior, Prior )
+			    )
+		formatString: 0.0%
+		displayFolder: Time intelligence
+		lineageTag: 71001b88-c2d2-4005-b237-8e76fd88121b
+
+	measure 'Revenue PM' = CALCULATE ( [Revenue], DATEADD ( dim_date[date], -1, MONTH ) )
+		formatString: \R\$ #,0
+		displayFolder: Time intelligence
+		lineageTag: 1f5e2f25-d589-4b78-b724-32fc63393667
+
+	measure 'Revenue MoM %' =
+			VAR Prior = [Revenue PM]
+			RETURN
+			    IF (
+			        NOT ISBLANK ( Prior ) && EDATE ( MIN ( dim_date[date] ), -1 ) >= [Analysis Start],
+			        DIVIDE ( [Revenue] - Prior, Prior )
+			    )
+		formatString: 0.0%
+		displayFolder: Time intelligence
+		lineageTag: 78f45802-2f81-47b3-8cfb-64129e51870e
+
+	measure 'Revenue YTD' =
+			IF (
+			    MIN ( dim_date[date] ) <= [Last Order Date],
+			    TOTALYTD ( [Revenue], dim_date[date] )
+			)
+		formatString: \R\$ #,0
+		displayFolder: Time intelligence
+		lineageTag: 2a49d7cc-e63a-4707-9216-a393f34585be
+
+	measure 'Revenue Running Total' =
+			IF (
+			    MIN ( dim_date[date] ) <= [Last Order Date],
+			    CALCULATE (
+			        [Revenue],
+			        FILTER ( ALL ( dim_date ), dim_date[date] <= MAX ( dim_date[date] ) )
+			    )
+			)
+		formatString: \R\$ #,0
+		displayFolder: Time intelligence
+		lineageTag: 1609c21f-2b0f-4273-9447-e5828a3230c8
+
+	measure 'Revenue 3M Moving Avg' =
+			IF (
+			    MIN ( dim_date[date] ) <= [Last Order Date],
+			    AVERAGEX (
+			        DATESINPERIOD ( dim_date[month_start], MAX ( dim_date[date] ), -3, MONTH ),
+			        CALCULATE ( [Revenue] )
+			    )
+			)
+		formatString: \R\$ #,0
+		displayFolder: Time intelligence
+		lineageTag: ae311507-d285-4e1e-b640-b97e92415eb2
+
+	measure 'Delivered Orders' = CALCULATE ( COUNTROWS ( fct_orders ), fct_orders[is_delivered] = TRUE () )
+		formatString: #,0
+		displayFolder: Delivery
+		lineageTag: 63628dd9-52a5-47f8-9f89-d5fd96f02820
+
+	measure 'Late Orders' =
+			CALCULATE (
+			    COUNTROWS ( fct_orders ),
+			    fct_orders[is_delivered] = TRUE (),
+			    fct_orders[is_late] = TRUE ()
+			)
+		formatString: #,0
+		displayFolder: Delivery
+		lineageTag: 8f9d1029-4727-4af1-bf3a-2b1ca2b6109e
+
+	/// Blank when nothing was delivered: 1 - DIVIDE ( blank ) would otherwise read as 100%.
+	measure 'On-time Delivery %' = IF ( [Delivered Orders] > 0, 1 - DIVIDE ( [Late Orders], [Delivered Orders] ) )
+		formatString: 0.0%
+		displayFolder: Delivery
+		lineageTag: a5f3e823-2011-4c60-ab30-91ab09265eee
+
+	measure 'Avg Delivery Days' = CALCULATE ( AVERAGE ( fct_orders[delivery_days] ), fct_orders[is_delivered] = TRUE () )
+		formatString: 0.0
+		displayFolder: Delivery
+		lineageTag: 37a975c6-adbb-44bc-b936-ac1d7b6c754b
+
+	measure 'Avg Days Late (late orders)' =
+			CALCULATE (
+			    AVERAGE ( fct_orders[delay_days] ),
+			    fct_orders[is_late] = TRUE ()
+			)
+		formatString: 0.0
+		displayFolder: Delivery
+		lineageTag: 03afe215-e672-47c3-a319-9421ca270751
+
+	measure 'Avg Review Score' = AVERAGE ( fct_reviews[score] )
+		formatString: 0.00
+		displayFolder: Reviews
+		lineageTag: 28980553-d34d-4d7e-9ae2-6aa49152895e
+
+	/// Filters on fct_orders reach fct_reviews through the order_id relationship, so this is the average score of reviews on late orders.
+	measure 'Avg Review Score (late)' = CALCULATE ( [Avg Review Score], fct_orders[is_late] = TRUE () )
+		formatString: 0.00
+		displayFolder: Reviews
+		lineageTag: 74b1ee93-7c42-4fb8-80e9-d98c123ce22d
+
+	measure 'Avg Review Score (on time)' =
+			CALCULATE (
+			    [Avg Review Score],
+			    fct_orders[is_delivered] = TRUE (),
+			    fct_orders[is_late] = FALSE ()
+			)
+		formatString: 0.00
+		displayFolder: Reviews
+		lineageTag: 2a019c33-7582-4f33-baea-d12da9cb6d69
+
+	/// Counts surveys by the date they were *sent*, using the inactive relationship: the active path to dim_date runs through fct_orders (purchase date).
+	measure 'Reviews Sent' =
+			CALCULATE (
+			    COUNTROWS ( fct_reviews ),
+			    USERELATIONSHIP ( fct_reviews[sent_date_key], dim_date[date_key] ),
+			    CROSSFILTER ( fct_reviews[order_id], fct_orders[order_id], NONE )
+			)
+		formatString: #,0
+		displayFolder: Reviews
+		lineageTag: 36afaedf-65c5-431f-9dd1-d98de5f20cb8
+
+	measure 'Review Response Rate' =
+			DIVIDE (
+			    CALCULATE ( COUNTROWS ( fct_reviews ), fct_reviews[is_answered] = TRUE () ),
+			    COUNTROWS ( fct_reviews )
+			)
+		formatString: 0.0%
+		displayFolder: Reviews
+		lineageTag: 5c5dac74-a321-42da-80d7-d6d28f26fda5
+
+	measure 'Payment Value' = SUM ( fct_payments[payment_value] )
+		formatString: \R\$ #,0
+		displayFolder: Payments
+		lineageTag: 90c31b5b-e328-4c73-8851-eda960777b3d
+
+	measure 'Voucher Share %' =
+			DIVIDE (
+			    CALCULATE ( [Payment Value], fct_payments[payment_type] = "voucher" ),
+			    [Payment Value]
+			)
+		formatString: 0.0%
+		displayFolder: Payments
+		lineageTag: 7e0f30cf-f673-459f-b0cc-5d8ba8c02ee9
+
+	measure 'Avg Installments (credit card)' = CALCULATE ( AVERAGE ( fct_payments[installments] ), fct_payments[payment_type] = "credit_card" )
+		formatString: 0.0
+		displayFolder: Payments
+		lineageTag: 08b44516-dd0e-449a-9dcc-ffe532afaf4a
+
+	measure 'Seller Revenue' = SUM ( mart_seller_monthly[revenue] )
+		formatString: \R\$ #,0
+		displayFolder: Sellers (mart_seller_monthly)
+		lineageTag: 0401b71c-e12e-4e00-b55b-ba11aca5e910
+
+	measure 'Seller Late Rate %' = DIVIDE ( SUM ( mart_seller_monthly[late_orders] ), SUM ( mart_seller_monthly[delivered_orders] ) )
+		formatString: 0.0%
+		displayFolder: Sellers (mart_seller_monthly)
+		lineageTag: 3706f098-9aa0-40a4-b023-28ad58c52cbd
+
+	/// Rank among all sellers (date filters still apply). ALL, not ALLSELECTED: on the drill-through page only one seller is selected, so ALLSELECTED would always return 1. The seller's state and city are cleared too, otherwise a table showing seller_state ranks each seller within its state.
+	measure 'Seller Revenue Rank' =
+			IF (
+			    HASONEVALUE ( mart_seller_monthly[seller_id] ),
+			    RANKX (
+			        ALL (
+			            mart_seller_monthly[seller_id],
+			            mart_seller_monthly[seller_state],
+			            mart_seller_monthly[seller_city]
+			        ),
+			        [Seller Revenue]
+			    )
+			)
+		formatString: #,0
+		displayFolder: Sellers (mart_seller_monthly)
+		lineageTag: 996ec0ad-d1a5-4440-82f2-5a72be25ac29
+
+	/// Header for the drill-through page.
+	measure 'Selected Seller' =
+			IF (
+			    HASONEVALUE ( mart_seller_monthly[seller_id] ),
+			    "Seller " & VALUES ( mart_seller_monthly[seller_id] )
+			        & "  ·  " & SELECTEDVALUE ( mart_seller_monthly[seller_state] ),
+			    "All sellers: right-click a seller on Delivery and reviews > Drill through"
+			)
+		displayFolder: Sellers (mart_seller_monthly)
+		lineageTag: eff05693-3323-4320-9abd-ce05c49046a3
+
+	/// Weighted across cohorts: total returning customers / total cohort size, never an average of percentages.
+	measure 'Cohort Retention %' =
+			DIVIDE (
+			    SUM ( mart_customer_cohorts[active_customers] ),
+			    SUM ( mart_customer_cohorts[cohort_size] )
+			)
+		formatString: 0.0%
+		displayFolder: Cohorts (mart_customer_cohorts)
+		lineageTag: 3ea771e8-9dd1-42c6-ada1-4958c55b8fab
+
+	column Dummy
+		dataType: string
+		isHidden
+		lineageTag: a9bc9844-0769-4fde-89c6-15485f59a381
+		summarizeBy: none
+		sourceColumn: Dummy
+
+	partition _Measures = m
+		mode: import
+		source = #table(type table [Dummy = text], {})
+

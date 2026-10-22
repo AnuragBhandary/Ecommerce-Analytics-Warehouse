@@ -45,6 +45,17 @@ CALCULATE (
     NOT fct_order_items[order_status] IN { "canceled", "unavailable" }
 )
 
+// Revenue at item grain, for anything sliced by product or seller (dim_product and dim_seller only
+// reach fct_order_items, so [Revenue] would repeat the grand total on every category). TREATAS
+// passes the orders visible in the current context (customer state, etc.) onto the items, so
+// this respects the same slicers as [Revenue] and sums to the same total.
+Item Revenue =
+CALCULATE (
+    SUM ( fct_order_items[item_revenue] ),
+    NOT fct_order_items[order_status] IN { "canceled", "unavailable" },
+    TREATAS ( VALUES ( fct_orders[order_id] ), fct_order_items[order_id] )
+)
+
 Freight Share % =
 DIVIDE (
     CALCULATE ( SUM ( fct_orders[freight_value] ),
@@ -81,13 +92,34 @@ DIVIDE ( [Revenue], CALCULATE ( [Revenue], ALLSELECTED () ) )
 
 // ---------------------------------------------------------------- time intelligence
 
+// Last day with an order. dim_date runs to 2019 but orders stop in Oct 2018; the measures below
+// return blank after this date, otherwise Revenue PY (and the running total, YTD, moving
+// average) would keep plotting into 2019. ALL ( fct_orders ) also clears filters coming from its
+// dimensions, so this is the same date whatever is sliced.
+Last Order Date =
+CALCULATE ( MAX ( fct_orders[purchased_at] ), ALL ( fct_orders ) )
+
+// Start of the analysis window. Olist's 2016 is a launch period (about 330 orders over three
+// months), so growth rates against it are meaningless (+4,000,000%). Growth measures return blank
+// when the comparison period falls before this date; trend pages also filter to Jan 2017 - Aug 2018
+// (Sep/Oct 2018 hold a handful of orders). Totals and cards still include every order.
+Analysis Start =
+DATE ( 2017, 1, 1 )
+
 Revenue PY =
-CALCULATE ( [Revenue], SAMEPERIODLASTYEAR ( dim_date[date] ) )
+IF (
+    MIN ( dim_date[date] ) <= [Last Order Date]
+        && EDATE ( MIN ( dim_date[date] ), -12 ) >= [Analysis Start],
+    CALCULATE ( [Revenue], SAMEPERIODLASTYEAR ( dim_date[date] ) )
+)
 
 Revenue YoY % =
 VAR Prior = [Revenue PY]
 RETURN
-    IF ( NOT ISBLANK ( Prior ), DIVIDE ( [Revenue] - Prior, Prior ) )
+    IF (
+        NOT ISBLANK ( Prior ) && EDATE ( MIN ( dim_date[date] ), -12 ) >= [Analysis Start],
+        DIVIDE ( [Revenue] - Prior, Prior )
+    )
 
 Revenue PM =
 CALCULATE ( [Revenue], DATEADD ( dim_date[date], -1, MONTH ) )
@@ -95,21 +127,33 @@ CALCULATE ( [Revenue], DATEADD ( dim_date[date], -1, MONTH ) )
 Revenue MoM % =
 VAR Prior = [Revenue PM]
 RETURN
-    IF ( NOT ISBLANK ( Prior ), DIVIDE ( [Revenue] - Prior, Prior ) )
+    IF (
+        NOT ISBLANK ( Prior ) && EDATE ( MIN ( dim_date[date] ), -1 ) >= [Analysis Start],
+        DIVIDE ( [Revenue] - Prior, Prior )
+    )
 
 Revenue YTD =
-TOTALYTD ( [Revenue], dim_date[date] )
+IF (
+    MIN ( dim_date[date] ) <= [Last Order Date],
+    TOTALYTD ( [Revenue], dim_date[date] )
+)
 
 Revenue Running Total =
-CALCULATE (
-    [Revenue],
-    FILTER ( ALL ( dim_date ), dim_date[date] <= MAX ( dim_date[date] ) )
+IF (
+    MIN ( dim_date[date] ) <= [Last Order Date],
+    CALCULATE (
+        [Revenue],
+        FILTER ( ALL ( dim_date ), dim_date[date] <= MAX ( dim_date[date] ) )
+    )
 )
 
 Revenue 3M Moving Avg =
-AVERAGEX (
-    DATESINPERIOD ( dim_date[month_start], MAX ( dim_date[date] ), -3, MONTH ),
-    CALCULATE ( [Revenue] )
+IF (
+    MIN ( dim_date[date] ) <= [Last Order Date],
+    AVERAGEX (
+        DATESINPERIOD ( dim_date[month_start], MAX ( dim_date[date] ), -3, MONTH ),
+        CALCULATE ( [Revenue] )
+    )
 )
 
 
@@ -125,8 +169,9 @@ CALCULATE (
     fct_orders[is_late] = TRUE ()
 )
 
+// Blank when nothing was delivered: 1 - DIVIDE ( blank ) would otherwise read as 100%.
 On-time Delivery % =
-1 - DIVIDE ( [Late Orders], [Delivered Orders] )
+IF ( [Delivered Orders] > 0, 1 - DIVIDE ( [Late Orders], [Delivered Orders] ) )
 
 Avg Delivery Days =
 CALCULATE ( AVERAGE ( fct_orders[delivery_days] ), fct_orders[is_delivered] = TRUE () )
@@ -194,10 +239,29 @@ SUM ( mart_seller_monthly[revenue] )
 Seller Late Rate % =
 DIVIDE ( SUM ( mart_seller_monthly[late_orders] ), SUM ( mart_seller_monthly[delivered_orders] ) )
 
+// Rank among all sellers (date filters still apply). ALL, not ALLSELECTED: on the drill-through
+// page only one seller is selected, so ALLSELECTED would always return 1. The seller's state and
+// city are cleared too, otherwise a table showing seller_state ranks each seller within its state.
 Seller Revenue Rank =
 IF (
     HASONEVALUE ( mart_seller_monthly[seller_id] ),
-    RANKX ( ALLSELECTED ( mart_seller_monthly[seller_id] ), [Seller Revenue] )
+    RANKX (
+        ALL (
+            mart_seller_monthly[seller_id],
+            mart_seller_monthly[seller_state],
+            mart_seller_monthly[seller_city]
+        ),
+        [Seller Revenue]
+    )
+)
+
+// Header for the drill-through page.
+Selected Seller =
+IF (
+    HASONEVALUE ( mart_seller_monthly[seller_id] ),
+    "Seller " & VALUES ( mart_seller_monthly[seller_id] )
+        & "  ·  " & SELECTEDVALUE ( mart_seller_monthly[seller_state] ),
+    "All sellers: right-click a seller on Delivery and reviews > Drill through"
 )
 
 
