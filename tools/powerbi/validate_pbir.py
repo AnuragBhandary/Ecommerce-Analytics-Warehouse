@@ -1,4 +1,5 @@
 """Validate every JSON file of a PBIP folder against the schema named in its $schema."""
+
 import glob
 import hashlib
 import json
@@ -20,8 +21,8 @@ def fetch(uri):
     path = os.path.join(CACHE, hashlib.md5(uri.encode()).hexdigest() + ".json")
     if not os.path.exists(path):
         raw = uri.replace("https://developer.microsoft.com/json-schemas/", GH)
-        with urllib.request.urlopen(raw) as r:
-            open(path, "wb").write(r.read())
+        with urllib.request.urlopen(raw) as r, open(path, "wb") as fh:
+            fh.write(r.read())
     return json.load(open(path, encoding="utf-8"))
 
 
@@ -31,11 +32,15 @@ def retrieve(uri):
 
 registry = Registry(retrieve=retrieve)
 errors = 0
-files = [f for f in glob.glob(os.path.join(sys.argv[1], "**", "*.*"), recursive=True)
-         if f.endswith((".json", ".pbir", ".pbip", ".pbism")) or os.path.basename(f) == ".platform"]
+files = [
+    f
+    for f in glob.glob(os.path.join(sys.argv[1], "**", "*.*"), recursive=True)
+    if f.endswith((".json", ".pbir", ".pbip", ".pbism")) or os.path.basename(f) == ".platform"
+]
 files += glob.glob(os.path.join(sys.argv[1], "**", ".platform"), recursive=True)
 for f in sorted(set(files)):
-    doc = json.load(open(f, encoding="utf-8"))
+    with open(f, encoding="utf-8") as fh:
+        doc = json.load(fh)
     uri = doc.get("$schema")
     if not uri:
         continue
@@ -43,5 +48,7 @@ for f in sorted(set(files)):
     errs = list(v.iter_errors(doc))
     for e in errs[:5]:
         errors += 1
-        print(f"{os.path.relpath(f, sys.argv[1])}: {'/'.join(map(str, e.absolute_path))}: {e.message[:300]}")
+        print(
+            f"{os.path.relpath(f, sys.argv[1])}: {'/'.join(map(str, e.absolute_path))}: {e.message[:300]}"
+        )
 print(f"checked {len(set(files))} files, {errors} errors")

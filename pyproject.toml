@@ -63,6 +63,10 @@ src = ["src", "tests", "airflow", "metabase"]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
 ignore = ["RUF012"]
 
+[tool.ruff.lint.per-file-ignores]
+# Long DAX, M and report text: splitting these lines helps nobody.
+"tools/powerbi/*" = ["E501"]
+
 [tool.mypy]
 python_version = "3.12"
 packages = ["olistwh"]

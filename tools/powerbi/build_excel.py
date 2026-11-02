@@ -1,20 +1,25 @@
 """Build excel/seller-performance.xlsx through Excel itself (COM), following excel/README.md."""
+
 import csv
 import os
-import win32com.client as win32
-
 import sys
+
+import win32com.client as win32
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))  # tools/powerbi -> repo root
 # Output file: argv[1], else tools/powerbi/out/seller-performance.xlsx.
-OUT = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 else os.path.join(HERE, "out", "seller-performance.xlsx")
+OUT = (
+    os.path.abspath(sys.argv[1])
+    if len(sys.argv) > 1
+    else os.path.join(HERE, "out", "seller-performance.xlsx")
+)
 EXPORTS = os.path.join(REPO, "exports")
 PBI_REVENUE = 15735527.03  # Power BI: Revenue (all years, no slicers)
 TOP_SELLER = "4869f7a5dfa277a7dca6462dcf3b52b2"
 BRL = '"R$" #,##0.00'
 
-M_MONTHLY = r'''let
+M_MONTHLY = r"""let
     Folder = Excel.CurrentWorkbook(){[Name = "ExportsFolder"]}[Content]{0}[ExportsFolder],
     Source = Csv.Document(File.Contents(Folder & "\mart_seller_monthly.csv"), [Delimiter = ",", Encoding = 65001, QuoteStyle = QuoteStyle.Csv]),
     Headers = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
@@ -22,9 +27,9 @@ M_MONTHLY = r'''let
     LateRate = Table.AddColumn(Typed, "late_rate", each if [delivered_orders] = 0 then null else [late_orders] / [delivered_orders], type number),
     YearMonth = Table.AddColumn(LateRate, "year_month", each Date.ToText([month], "yyyy-MM"), type text)
 in
-    YearMonth'''
+    YearMonth"""
 
-M_TOTALS = r'''let
+M_TOTALS = r"""let
     Source = SellerMonthly,
     Grouped = Table.Group(Source, {"seller_id", "seller_state", "seller_city"}, {
         {"Sum of revenue", each List.Sum([revenue]), Currency.Type},
@@ -35,7 +40,7 @@ M_TOTALS = r'''let
     LateRate = Table.AddColumn(Grouped, "late_rate", each if [Sum of delivered_orders] = 0 then null else [Sum of late_orders] / [Sum of delivered_orders], type number),
     Sorted = Table.Sort(LateRate, {{"Sum of revenue", Order.Descending}})
 in
-    Sorted'''
+    Sorted"""
 
 xlSrcExternal, xlCmdSql, xlDatabase = 0, 2, 1
 xlRowField, xlColumnField = 1, 2
@@ -47,8 +52,10 @@ xlLine = 4
 
 
 def load_query(wb, ws, name):
-    conn = (f"OLEDB;Provider=Microsoft.Mashup.OleDb.1;Data Source=$Workbook$;"
-            f"Location={name};Extended Properties=\"\"")
+    conn = (
+        f"OLEDB;Provider=Microsoft.Mashup.OleDb.1;Data Source=$Workbook$;"
+        f'Location={name};Extended Properties=""'
+    )
     lo = ws.ListObjects.Add(xlSrcExternal, conn, None, 1, ws.Range("A1"))
     lo.Name = name
     qt = lo.QueryTable
@@ -91,8 +98,10 @@ def build(xl, wb):
     st.Range("A1").Value = "ExportsFolder"
     st.Range("A2").Value = EXPORTS
     st.ListObjects.Add(1, st.Range("A1:A2"), None, 1).Name = "ExportsFolder"
-    st.Range("A4").Value = ("Folder with the `make export` CSVs. Change A2 if the folder moves, "
-                            "then Data > Refresh All.")
+    st.Range("A4").Value = (
+        "Folder with the `make export` CSVs. Change A2 if the folder moves, "
+        "then Data > Refresh All."
+    )
     st.Columns("A").ColumnWidth = 80
 
     # 1. Power Query
@@ -100,10 +109,21 @@ def build(xl, wb):
     wb.Queries.Add("SellerTotals", M_TOTALS, "One row per seller, grouped from SellerMonthly")
     data = load_query(wb, da, "SellerMonthly")
     sellers = load_query(wb, se, "SellerTotals")
-    for lo, cols in ((data, {"revenue": BRL, "late_rate": "0.0%", "avg_review_score": "0.00",
-                             "month": "yyyy-mm-dd"}),
-                     (sellers, {"Sum of revenue": BRL, "late_rate": "0.0%",
-                                "Average of avg_review_score": "0.00"})):
+    for lo, cols in (
+        (
+            data,
+            {
+                "revenue": BRL,
+                "late_rate": "0.0%",
+                "avg_review_score": "0.00",
+                "month": "yyyy-mm-dd",
+            },
+        ),
+        (
+            sellers,
+            {"Sum of revenue": BRL, "late_rate": "0.0%", "Average of avg_review_score": "0.00"},
+        ),
+    ):
         for c, fmt in cols.items():
             lo.ListColumns(c).DataBodyRange.NumberFormat = fmt
         lo.Range.Columns.AutoFit()
@@ -113,7 +133,9 @@ def build(xl, wb):
     fc = rng.FormatConditions.Add(xlCellValue, xlGreater, "=0.1")
     fc.Interior.Color = 0xC7CEFF  # light red (BGR)
     fc.Font.Color = 0x06009C
-    cs = sellers.ListColumns("Average of avg_review_score").DataBodyRange.FormatConditions.AddColorScale(3)
+    cs = sellers.ListColumns(
+        "Average of avg_review_score"
+    ).DataBodyRange.FormatConditions.AddColorScale(3)
     cs.ColorScaleCriteria(1).FormatColor.Color = 0x6B69F8  # red
     cs.ColorScaleCriteria(2).FormatColor.Color = 0x84EBFF  # yellow
     cs.ColorScaleCriteria(3).FormatColor.Color = 0x7BBE63  # green
@@ -136,25 +158,45 @@ def build(xl, wb):
     p2.PivotFields("seller_id").Orientation = xlRowField
     p2.AddDataField(p2.PivotFields("revenue"), "Revenue ", xlSum).NumberFormat = '"R$" #,##0'
     p2.AddDataField(p2.PivotFields("orders"), "Orders ", xlSum).NumberFormat = "#,##0"
-    p2.AddDataField(p2.PivotFields("avg_review_score"), "Avg review score ", xlAverage).NumberFormat = "0.00"
-    p2.PivotFields("seller_id").PivotFilters.Add2(Type=1, DataField=p2.DataFields("Revenue "), Value1=10)  # xlTopCount
+    p2.AddDataField(
+        p2.PivotFields("avg_review_score"), "Avg review score ", xlAverage
+    ).NumberFormat = "0.00"
+    p2.PivotFields("seller_id").PivotFilters.Add2(
+        Type=1, DataField=p2.DataFields("Revenue "), Value1=10
+    )  # xlTopCount
 
     pv.Range(f"G{top - 1}").Value = "Late deliveries by seller state"
     pv.Range(f"G{top - 1}").Font.Bold = True
     p3 = cache.CreatePivotTable(pv.Range(f"G{top}"), "LateByState")
     p3.PivotFields("seller_state").Orientation = xlRowField
     p3.AddDataField(p3.PivotFields("late_orders"), "Late orders ", xlSum).NumberFormat = "#,##0"
-    p3.AddDataField(p3.PivotFields("delivered_orders"), "Delivered orders ", xlSum).NumberFormat = "#,##0"
+    p3.AddDataField(
+        p3.PivotFields("delivered_orders"), "Delivered orders ", xlSum
+    ).NumberFormat = "#,##0"
     p3.CalculatedFields().Add("LateRate", "= late_orders / delivered_orders", True)
     p3.AddDataField(p3.PivotFields("LateRate"), "Late % ", xlSum).NumberFormat = "0.0%"
 
     # Slicer + timeline above the pivots, connected to all three
     sl = wb.SlicerCaches.Add2(p1, "seller_state", "Slicer_seller_state", xlSlicer)
-    sl.Slicers.Add(SlicerDestination=pv, Name="StateSlicer", Caption="Seller state",
-                   Top=pv.Range("A2").Top, Left=pv.Range("A2").Left, Width=150, Height=160)
+    sl.Slicers.Add(
+        SlicerDestination=pv,
+        Name="StateSlicer",
+        Caption="Seller state",
+        Top=pv.Range("A2").Top,
+        Left=pv.Range("A2").Left,
+        Width=150,
+        Height=160,
+    )
     tl = wb.SlicerCaches.Add2(p1, "month", "Timeline_month", xlTimeline)
-    tl.Slicers.Add(SlicerDestination=pv, Name="MonthTimeline", Caption="Month",
-                   Top=pv.Range("A2").Top, Left=pv.Range("A2").Left + 170, Width=520, Height=110)
+    tl.Slicers.Add(
+        SlicerDestination=pv,
+        Name="MonthTimeline",
+        Caption="Month",
+        Top=pv.Range("A2").Top,
+        Left=pv.Range("A2").Left + 170,
+        Width=520,
+        Height=110,
+    )
     for c in (sl, tl):
         c.PivotTables.AddPivotTable(p2)
         c.PivotTables.AddPivotTable(p3)
@@ -169,14 +211,42 @@ def build(xl, wb):
     sc.Range("B2").Interior.Color = 0xCCF2FF
     sc.Range("B2").Validation.Add(xlValidateList, 1, 1, '=INDIRECT("SellerTotals[seller_id]")')
     rows = [
-        ("State", '=XLOOKUP($B$2, SellerTotals[seller_id], SellerTotals[seller_state], "not found")', None),
+        (
+            "State",
+            '=XLOOKUP($B$2, SellerTotals[seller_id], SellerTotals[seller_state], "not found")',
+            None,
+        ),
         ("City", '=XLOOKUP($B$2, SellerTotals[seller_id], SellerTotals[seller_city], "")', None),
-        ("Revenue", '=XLOOKUP($B$2, SellerTotals[seller_id], SellerTotals[Sum of revenue], 0)', BRL),
-        ("Orders", '=XLOOKUP($B$2, SellerTotals[seller_id], SellerTotals[Sum of orders], 0)', "#,##0"),
-        ("Late rate", '=XLOOKUP($B$2, SellerTotals[seller_id], SellerTotals[late_rate], "")', "0.0%"),
-        ("Avg review score", '=XLOOKUP($B$2, SellerTotals[seller_id], SellerTotals[Average of avg_review_score], "")', "0.00"),
-        ("Revenue rank (all sellers)", '=COUNTIF(SellerTotals[Sum of revenue], ">" & B6) + 1', "#,##0"),
-        ("Revenue rank (in state)", '=COUNTIFS(SellerTotals[seller_state], B4, SellerTotals[Sum of revenue], ">" & B6) + 1', "#,##0"),
+        (
+            "Revenue",
+            "=XLOOKUP($B$2, SellerTotals[seller_id], SellerTotals[Sum of revenue], 0)",
+            BRL,
+        ),
+        (
+            "Orders",
+            "=XLOOKUP($B$2, SellerTotals[seller_id], SellerTotals[Sum of orders], 0)",
+            "#,##0",
+        ),
+        (
+            "Late rate",
+            '=XLOOKUP($B$2, SellerTotals[seller_id], SellerTotals[late_rate], "")',
+            "0.0%",
+        ),
+        (
+            "Avg review score",
+            '=XLOOKUP($B$2, SellerTotals[seller_id], SellerTotals[Average of avg_review_score], "")',
+            "0.00",
+        ),
+        (
+            "Revenue rank (all sellers)",
+            '=COUNTIF(SellerTotals[Sum of revenue], ">" & B6) + 1',
+            "#,##0",
+        ),
+        (
+            "Revenue rank (in state)",
+            '=COUNTIFS(SellerTotals[seller_state], B4, SellerTotals[Sum of revenue], ">" & B6) + 1',
+            "#,##0",
+        ),
     ]
     for i, (label, formula, fmt) in enumerate(rows, 4):
         sc.Range(f"A{i}").Value = label
@@ -186,32 +256,35 @@ def build(xl, wb):
         if fmt:
             sc.Range(f"B{i}").NumberFormat = fmt
     sc.Range("B4:B11").HorizontalAlignment = -4152  # right
-    c = sc.Range("B8").FormatConditions.Add(xlExpression, None, '=AND(ISNUMBER($B$8), $B$8>0.1)')
+    c = sc.Range("B8").FormatConditions.Add(xlExpression, None, "=AND(ISNUMBER($B$8), $B$8>0.1)")
     c.Font.Color, c.Font.Bold = 0x0000C0, True
-    c = sc.Range("B9").FormatConditions.Add(xlExpression, None, '=AND(ISNUMBER($B$9), $B$9<3.5)')
+    c = sc.Range("B9").FormatConditions.Add(xlExpression, None, "=AND(ISNUMBER($B$9), $B$9<3.5)")
     c.Font.Color, c.Font.Bold = 0x0000C0, True
 
     # Monthly trend for the selected seller: one row per month, SUMIFS against the Data table
     sc.Range("A13").Value = "Monthly trend (selected seller)"
     sc.Range("A13").Font.Bold = True
-    for col, h in zip("ABCD", ["Month", "Orders", "Revenue", "Late orders"]):
+    for col, h in zip("ABCD", ["Month", "Orders", "Revenue", "Late orders"], strict=True):
         sc.Range(f"{col}14").Value = h
         sc.Range(f"{col}14").Font.Bold = True
-    months = sorted({r["month"][:7] for r in csv.DictReader(open(os.path.join(EXPORTS, "mart_seller_monthly.csv"),
-                                                                  encoding="utf-8"))})
+    with open(os.path.join(EXPORTS, "mart_seller_monthly.csv"), encoding="utf-8") as fh:
+        months = sorted({r["month"][:7] for r in csv.DictReader(fh)})
     last = 14 + len(months)
     sc.Range(f"A15:A{last}").NumberFormat = "@"
     for i, m in enumerate(months, 15):
         sc.Range(f"A{i}").Value = m
     for col, field in (("B", "orders"), ("C", "revenue"), ("D", "late_orders")):
-        sc.Range(f"{col}15:{col}{last}").Formula = (
-            f"=SUMIFS(SellerMonthly[{field}], SellerMonthly[seller_id], $B$2, SellerMonthly[year_month], $A15)")
+        sc.Range(
+            f"{col}15:{col}{last}"
+        ).Formula = f"=SUMIFS(SellerMonthly[{field}], SellerMonthly[seller_id], $B$2, SellerMonthly[year_month], $A15)"
     sc.Range(f"C15:C{last}").NumberFormat = BRL
-    
+
     # 5. Reconciliation
-    rec = [("Total revenue (workbook)", "=SUM(SellerMonthly[revenue])"),
-           ("Total revenue (Power BI)", PBI_REVENUE),
-           ("Check", '=IF(ROUND(F2-F3, 2) = 0, "OK", "MISMATCH")')]
+    rec = [
+        ("Total revenue (workbook)", "=SUM(SellerMonthly[revenue])"),
+        ("Total revenue (Power BI)", PBI_REVENUE),
+        ("Check", '=IF(ROUND(F2-F3, 2) = 0, "OK", "MISMATCH")'),
+    ]
     for i, (label, val) in enumerate(rec, 2):
         sc.Range(f"E{i}").Value = label
         if isinstance(val, str):
@@ -223,7 +296,9 @@ def build(xl, wb):
     ok.Interior.Color, ok.Font.Color, ok.Font.Bold = 0xCEEFC6, 0x006100, True
     bad = sc.Range("F4").FormatConditions.Add(xlCellValue, 3, '="MISMATCH"')
     bad.Interior.Color, bad.Font.Color, bad.Font.Bold = 0xC7CEFF, 0x06009C, True
-    sc.Range("E5").Value = "Power BI figure: Revenue card on the Overview page (all years, no slicers)."
+    sc.Range(
+        "E5"
+    ).Value = "Power BI figure: Revenue card on the Overview page (all years, no slicers)."
     sc.Range("E5").Font.Italic = True
     sc.Columns("A").ColumnWidth = 26
     sc.Columns("B").ColumnWidth = 36

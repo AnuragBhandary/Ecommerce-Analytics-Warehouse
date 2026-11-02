@@ -1,4 +1,5 @@
 """Helpers to write a Power BI project (.pbip): TMDL semantic model + PBIR report."""
+
 import json
 import os
 import shutil
@@ -33,12 +34,30 @@ def wjson(path, obj):
 
 # ------------------------------------------------------------------ TMDL
 
-M_TYPE = {"text": "type text", "int": "Int64.Type", "num": "type number", "cur": "Currency.Type",
-          "date": "type date", "dt": "type datetime"}
-TMDL_TYPE = {"text": "string", "int": "int64", "num": "double", "cur": "decimal", "date": "dateTime",
-             "dt": "dateTime", "bool": "boolean"}
-DEFAULT_FMT = {"int": "#,0", "num": "#,0.00", "cur": "#,0.00", "date": "yyyy-mm-dd",
-               "dt": "yyyy-mm-dd hh:nn:ss"}
+M_TYPE = {
+    "text": "type text",
+    "int": "Int64.Type",
+    "num": "type number",
+    "cur": "Currency.Type",
+    "date": "type date",
+    "dt": "type datetime",
+}
+TMDL_TYPE = {
+    "text": "string",
+    "int": "int64",
+    "num": "double",
+    "cur": "decimal",
+    "date": "dateTime",
+    "dt": "dateTime",
+    "bool": "boolean",
+}
+DEFAULT_FMT = {
+    "int": "#,0",
+    "num": "#,0.00",
+    "cur": "#,0.00",
+    "date": "yyyy-mm-dd",
+    "dt": "yyyy-mm-dd hh:nn:ss",
+}
 
 
 def q(name):
@@ -49,7 +68,9 @@ def q(name):
 
 
 def indent(text, tabs):
-    return "\n".join(("\t" * tabs + line) if line.strip() else "" for line in text.strip("\n").split("\n"))
+    return "\n".join(
+        ("\t" * tabs + line) if line.strip() else "" for line in text.strip("\n").split("\n")
+    )
 
 
 def csv_partition_m(file, cols, param, nulls=("",), web=False):
@@ -58,19 +79,24 @@ def csv_partition_m(file, cols, param, nulls=("",), web=False):
     web=True reads `param` as a base URL (Web.Contents with RelativePath), else as a local folder."""
     names = ", ".join(f'"{c[0]}"' for c in cols)
     null_test = " or ".join(f'_ = "{n}"' for n in nulls)
-    contents = (f'Web.Contents({param}, [RelativePath = "{file}"])' if web
-                else f'File.Contents({param} & "\\{file}")')
+    contents = (
+        f'Web.Contents({param}, [RelativePath = "{file}"])'
+        if web
+        else f'File.Contents({param} & "\\{file}")'
+    )
     bools = [c[0] for c in cols if c[1] == "bool"]
     typed = ", ".join(f'{{"{c[0]}", {M_TYPE[c[1]]}}}' for c in cols if c[1] != "bool")
     steps = [
         f'Source = Csv.Document({contents}, [Delimiter = ",", Encoding = 65001, QuoteStyle = QuoteStyle.Csv]),',
         "Headers = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),",
         f"Kept = Table.SelectColumns(Headers, {{{names}}}),",
-        f'Blanks = Table.TransformColumns(Kept, {{}}, each if {null_test} then null else _),',
+        f"Blanks = Table.TransformColumns(Kept, {{}}, each if {null_test} then null else _),",
     ]
     last = "Blanks"
     if bools:
-        conv = ", ".join(f'{{"{b}", each if _ = null then null else _ = "t", type logical}}' for b in bools)
+        conv = ", ".join(
+            f'{{"{b}", each if _ = null then null else _ = "t", type logical}}' for b in bools
+        )
         steps.append(f"Flags = Table.TransformColumns(Blanks, {{{conv}}}),")
         last = "Flags"
     steps.append(f'Typed = Table.TransformColumnTypes({last}, {{{typed}}}, "en-US")')
@@ -137,16 +163,22 @@ def write_semantic_model(root, name, tables, relationships, roles, expressions, 
     sm = os.path.join(root, f"{name}.SemanticModel")
     if os.path.isdir(os.path.join(sm, "definition")):
         shutil.rmtree(os.path.join(sm, "definition"))
-    wjson(os.path.join(sm, "definition.pbism"), {
-        "$schema": f"{SCHEMA}/item/semanticModel/definitionProperties/1.0.0/schema.json",
-        "version": "4.2",
-        "settings": {},
-    })
-    wjson(os.path.join(sm, ".platform"), {
-        "$schema": f"{SCHEMA}/gitIntegration/platformProperties/2.0.0/schema.json",
-        "metadata": {"type": "SemanticModel", "displayName": name},
-        "config": {"version": "2.0", "logicalId": gid(name, "sm")},
-    })
+    wjson(
+        os.path.join(sm, "definition.pbism"),
+        {
+            "$schema": f"{SCHEMA}/item/semanticModel/definitionProperties/1.0.0/schema.json",
+            "version": "4.2",
+            "settings": {},
+        },
+    )
+    wjson(
+        os.path.join(sm, ".platform"),
+        {
+            "$schema": f"{SCHEMA}/gitIntegration/platformProperties/2.0.0/schema.json",
+            "metadata": {"type": "SemanticModel", "displayName": name},
+            "config": {"version": "2.0", "logicalId": gid(name, "sm")},
+        },
+    )
     d = os.path.join(sm, "definition")
     write(os.path.join(d, "database.tmdl"), "database\n\tcompatibilityLevel: 1600\n\n")
     model = [
@@ -162,7 +194,7 @@ def write_semantic_model(root, name, tables, relationships, roles, expressions, 
         "",
         "annotation PBI_QueryOrder = " + json.dumps(query_order, separators=(",", ":")),
         "",
-        "annotation PBI_ProTooling = [\"DevMode\"]",
+        'annotation PBI_ProTooling = ["DevMode"]',
         "",
     ]
     for t in tables:
@@ -193,6 +225,7 @@ def write_semantic_model(root, name, tables, relationships, roles, expressions, 
 
 
 # ------------------------------------------------------------------ PBIR
+
 
 def lit(v):
     """Literal expression; strings are quoted the PBIR way ('text'), bools/numbers raw."""
@@ -230,7 +263,10 @@ def qref(field):
     a = field["Aggregation"]
     c = a["Expression"]["Column"]
     fn = AGG_NAME[a["Function"]]
-    return f"{fn}({c['Expression']['SourceRef']['Entity']}.{c['Property']})", f"{fn} of {c['Property']}"
+    return (
+        f"{fn}({c['Expression']['SourceRef']['Entity']}.{c['Property']})",
+        f"{fn} of {c['Property']}",
+    )
 
 
 def proj(field, display=None):
@@ -241,8 +277,18 @@ def proj(field, display=None):
     return p
 
 
-def visual(name, vtype, pos, roles=None, title=None, objects=None, sort=None, filters=None,
-           vco=None, extra=None):
+def visual(
+    name,
+    vtype,
+    pos,
+    roles=None,
+    title=None,
+    objects=None,
+    sort=None,
+    filters=None,
+    vco=None,
+    extra=None,
+):
     x, y, w, h = pos
     v = {"visualType": vtype}
     if roles:
@@ -252,7 +298,9 @@ def visual(name, vtype, pos, roles=None, title=None, objects=None, sort=None, fi
         v["query"] = {"queryState": qs}
         if sort:
             v["query"]["sortDefinition"] = {
-                "sort": [{"field": f, "direction": d} for f, d in sort], "isDefaultSort": False}
+                "sort": [{"field": f, "direction": d} for f, d in sort],
+                "isDefaultSort": False,
+            }
     if objects:
         v["objects"] = objects
     container = dict(vco or {})
@@ -263,8 +311,12 @@ def visual(name, vtype, pos, roles=None, title=None, objects=None, sort=None, fi
     if extra:
         v.update(extra)
     v["drillFilterOtherVisuals"] = True
-    out = {"$schema": V_VISUAL, "name": name,
-           "position": {"x": x, "y": y, "z": 0, "width": w, "height": h, "tabOrder": 0}, "visual": v}
+    out = {
+        "$schema": V_VISUAL,
+        "name": name,
+        "position": {"x": x, "y": y, "z": 0, "width": w, "height": h, "tabOrder": 0},
+        "visual": v,
+    }
     if filters:
         out["filterConfig"] = {"filters": filters}
     return out
@@ -273,16 +325,30 @@ def visual(name, vtype, pos, roles=None, title=None, objects=None, sort=None, fi
 def gradient(field, ref, colors):
     """Background colour scale on a matrix/table value column."""
     if len(colors) == 2:
-        rule = {"linearGradient2": {"min": {"color": lit(colors[0])["expr"]},
-                                    "max": {"color": lit(colors[1])["expr"]},
-                                    "nullColoringStrategy": {"strategy": lit("noColor")["expr"]}}}
+        rule = {
+            "linearGradient2": {
+                "min": {"color": lit(colors[0])["expr"]},
+                "max": {"color": lit(colors[1])["expr"]},
+                "nullColoringStrategy": {"strategy": lit("noColor")["expr"]},
+            }
+        }
     else:
-        rule = {"linearGradient3": {"min": {"color": lit(colors[0])["expr"]},
-                                    "mid": {"color": lit(colors[1])["expr"]},
-                                    "max": {"color": lit(colors[2])["expr"]},
-                                    "nullColoringStrategy": {"strategy": lit("noColor")["expr"]}}}
-    return {"properties": {"backColor": {"solid": {"color": {"expr": {"FillRule": {"Input": field, "FillRule": rule}}}}}},
-            "selector": {"data": [{"dataViewWildcard": {"matchingOption": 1}}], "metadata": ref}}
+        rule = {
+            "linearGradient3": {
+                "min": {"color": lit(colors[0])["expr"]},
+                "mid": {"color": lit(colors[1])["expr"]},
+                "max": {"color": lit(colors[2])["expr"]},
+                "nullColoringStrategy": {"strategy": lit("noColor")["expr"]},
+            }
+        }
+    return {
+        "properties": {
+            "backColor": {
+                "solid": {"color": {"expr": {"FillRule": {"Input": field, "FillRule": rule}}}}
+            }
+        },
+        "selector": {"data": [{"dataViewWildcard": {"matchingOption": 1}}], "metadata": ref},
+    }
 
 
 CMP = {">": 1, ">=": 2, "<": 3, "<=": 4}
@@ -291,14 +357,23 @@ CMP = {">": 1, ">=": 2, "<": 3, "<=": 4}
 def range_filter(name, entity, column, conditions):
     """Advanced filter: conditions = [(op, literal_value_string)], ANDed. e.g. [('>=', "datetime'2017-01-01T00:00:00'")]"""
     ref = {"Column": {"Expression": {"SourceRef": {"Source": "d"}}, "Property": column}}
-    conds = [{"Comparison": {"ComparisonKind": CMP[op], "Left": ref, "Right": {"Literal": {"Value": v}}}}
-             for op, v in conditions]
+    conds = [
+        {"Comparison": {"ComparisonKind": CMP[op], "Left": ref, "Right": {"Literal": {"Value": v}}}}
+        for op, v in conditions
+    ]
     cond = conds[0]
     for c in conds[1:]:
         cond = {"And": {"Left": cond, "Right": c}}
-    return {"name": name, "field": col(entity, column), "type": "Advanced",
-            "filter": {"Version": 2, "From": [{"Name": "d", "Entity": entity, "Type": 0}],
-                       "Where": [{"Condition": cond}]}}
+    return {
+        "name": name,
+        "field": col(entity, column),
+        "type": "Advanced",
+        "filter": {
+            "Version": 2,
+            "From": [{"Name": "d", "Entity": entity, "Type": 0}],
+            "Where": [{"Condition": cond}],
+        },
+    }
 
 
 def topn_filter(name, entity, column, measure, n):
@@ -309,20 +384,61 @@ def topn_filter(name, entity, column, measure, n):
         "filter": {
             "Version": 2,
             "From": [
-                {"Name": "subquery", "Expression": {"Subquery": {"Query": {
-                    "Version": 2,
-                    "From": [{"Name": "d", "Entity": entity, "Type": 0},
-                             {"Name": "m", "Entity": "_Measures", "Type": 0}],
-                    "Select": [{"Column": {"Expression": {"SourceRef": {"Source": "d"}}, "Property": column},
-                                "Name": "field"}],
-                    "OrderBy": [{"Direction": 2, "Expression": {
-                        "Measure": {"Expression": {"SourceRef": {"Source": "m"}}, "Property": measure}}}],
-                    "Top": n}}}, "Type": 2},
+                {
+                    "Name": "subquery",
+                    "Expression": {
+                        "Subquery": {
+                            "Query": {
+                                "Version": 2,
+                                "From": [
+                                    {"Name": "d", "Entity": entity, "Type": 0},
+                                    {"Name": "m", "Entity": "_Measures", "Type": 0},
+                                ],
+                                "Select": [
+                                    {
+                                        "Column": {
+                                            "Expression": {"SourceRef": {"Source": "d"}},
+                                            "Property": column,
+                                        },
+                                        "Name": "field",
+                                    }
+                                ],
+                                "OrderBy": [
+                                    {
+                                        "Direction": 2,
+                                        "Expression": {
+                                            "Measure": {
+                                                "Expression": {"SourceRef": {"Source": "m"}},
+                                                "Property": measure,
+                                            }
+                                        },
+                                    }
+                                ],
+                                "Top": n,
+                            }
+                        }
+                    },
+                    "Type": 2,
+                },
                 {"Name": "d", "Entity": entity, "Type": 0},
             ],
-            "Where": [{"Condition": {"In": {
-                "Expressions": [{"Column": {"Expression": {"SourceRef": {"Source": "d"}}, "Property": column}}],
-                "Table": {"SourceRef": {"Source": "subquery"}}}}}],
+            "Where": [
+                {
+                    "Condition": {
+                        "In": {
+                            "Expressions": [
+                                {
+                                    "Column": {
+                                        "Expression": {"SourceRef": {"Source": "d"}},
+                                        "Property": column,
+                                    }
+                                }
+                            ],
+                            "Table": {"SourceRef": {"Source": "subquery"}},
+                        }
+                    }
+                }
+            ],
         },
     }
 
@@ -332,31 +448,57 @@ def write_report(root, name, pages):
     rp = os.path.join(root, f"{name}.Report")
     if os.path.isdir(os.path.join(rp, "definition")):
         shutil.rmtree(os.path.join(rp, "definition"))
-    wjson(os.path.join(rp, "definition.pbir"), {
-        "$schema": f"{SCHEMA}/item/report/definitionProperties/2.0.0/schema.json",
-        "version": "4.0",
-        "datasetReference": {"byPath": {"path": f"../{name}.SemanticModel"}},
-    })
-    wjson(os.path.join(rp, ".platform"), {
-        "$schema": f"{SCHEMA}/gitIntegration/platformProperties/2.0.0/schema.json",
-        "metadata": {"type": "Report", "displayName": name},
-        "config": {"version": "2.0", "logicalId": gid(name, "report")},
-    })
+    wjson(
+        os.path.join(rp, "definition.pbir"),
+        {
+            "$schema": f"{SCHEMA}/item/report/definitionProperties/2.0.0/schema.json",
+            "version": "4.0",
+            "datasetReference": {"byPath": {"path": f"../{name}.SemanticModel"}},
+        },
+    )
+    wjson(
+        os.path.join(rp, ".platform"),
+        {
+            "$schema": f"{SCHEMA}/gitIntegration/platformProperties/2.0.0/schema.json",
+            "metadata": {"type": "Report", "displayName": name},
+            "config": {"version": "2.0", "logicalId": gid(name, "report")},
+        },
+    )
     d = os.path.join(rp, "definition")
     wjson(os.path.join(d, "version.json"), {"$schema": V_VERSION, "version": "2.0.0"})
-    wjson(os.path.join(d, "report.json"), {
-        "$schema": V_REPORT,
-        "themeCollection": {},
-        "settings": {"useStylableVisualContainerHeader": True, "exportDataMode": "AllowSummarized",
-                     "defaultDrillFilterOtherVisuals": True, "allowChangeFilterTypes": True,
-                     "useEnhancedTooltips": True, "useDefaultAggregateDisplayName": True},
-    })
-    wjson(os.path.join(d, "pages", "pages.json"), {
-        "$schema": V_PAGES, "pageOrder": [p["name"] for p in pages], "activePageName": pages[0]["name"]})
+    wjson(
+        os.path.join(d, "report.json"),
+        {
+            "$schema": V_REPORT,
+            "themeCollection": {},
+            "settings": {
+                "useStylableVisualContainerHeader": True,
+                "exportDataMode": "AllowSummarized",
+                "defaultDrillFilterOtherVisuals": True,
+                "allowChangeFilterTypes": True,
+                "useEnhancedTooltips": True,
+                "useDefaultAggregateDisplayName": True,
+            },
+        },
+    )
+    wjson(
+        os.path.join(d, "pages", "pages.json"),
+        {
+            "$schema": V_PAGES,
+            "pageOrder": [p["name"] for p in pages],
+            "activePageName": pages[0]["name"],
+        },
+    )
     for p in pages:
         pd = os.path.join(d, "pages", p["name"])
-        page = {"$schema": V_PAGE, "name": p["name"], "displayName": p["displayName"],
-                "displayOption": "FitToPage", "height": 720, "width": 1280}
+        page = {
+            "$schema": V_PAGE,
+            "name": p["name"],
+            "displayName": p["displayName"],
+            "displayOption": "FitToPage",
+            "height": 720,
+            "width": 1280,
+        }
         if p.get("filters"):
             page["filterConfig"] = {"filters": p["filters"]}
         if p.get("binding"):
@@ -371,9 +513,12 @@ def write_report(root, name, pages):
 
 
 def write_pbip(root, name):
-    wjson(os.path.join(root, f"{name}.pbip"), {
-        "$schema": f"{SCHEMA}/pbip/pbipProperties/1.0.0/schema.json",
-        "version": "1.0",
-        "artifacts": [{"report": {"path": f"{name}.Report"}}],
-        "settings": {"enableAutoRecovery": True},
-    })
+    wjson(
+        os.path.join(root, f"{name}.pbip"),
+        {
+            "$schema": f"{SCHEMA}/pbip/pbipProperties/1.0.0/schema.json",
+            "version": "1.0",
+            "artifacts": [{"report": {"path": f"{name}.Report"}}],
+            "settings": {"enableAutoRecovery": True},
+        },
+    )
