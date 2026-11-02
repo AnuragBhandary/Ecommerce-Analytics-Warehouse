@@ -142,7 +142,7 @@ airflow/dags/       olist_elt DAG
 metabase/           dashboards-as-code
 powerbi/  excel/    build guides, DAX measures
 scripts/prove.py    full-data proof run -> docs/results.json
-docs/               DESIGN, RESULTS, INTERVIEW
+docs/               DESIGN, RESULTS
 ```
 
 Data: Olist, CC BY-NC-SA 4.0. Code: MIT.
